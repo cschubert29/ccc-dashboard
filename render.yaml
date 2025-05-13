@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: ccc-dashboard
+    env: python
+    buildCommand: ""
+    startCommand: gunicorn test_path:app
+    region: oregon
+    plan: free
+    branch: main
