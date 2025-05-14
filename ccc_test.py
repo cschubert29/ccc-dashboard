@@ -2,7 +2,10 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from dash import Dash, dcc, html, Input, Output, State
+from dash import Dash, dcc, html, Input, Output, State, ctx
+import csv
+import os
+
 
 file_path = "C:/Users/jamie/OneDrive/Documents/CCC Project/ccc-phase3-public.csv"
 US_POPULATION = 340_100_000
@@ -15,11 +18,20 @@ df['participants_numeric'] = df['size_mean']
 df['targets'] = df['targets'].astype(str).str.lower()
 df['organizations'] = df['organizations'].astype(str).str.lower()
 
-app = Dash(__name__)
+app = Dash(__name__, suppress_callback_exceptions=True)
 app.title = "Protest Dashboard"
 
 app.layout = html.Div([
+    dcc.Location(id='url', refresh=False),
+    html.Div(id='page-content')
+])
+
+# PAGE 1 
+
+dashboard_layout = html.Div([
+    # Sidebar
     html.Div([
+        # dcc.Link('📥 Submit New Protest Event', href='/submit', style={'display': 'block', 'margin': '10px 0 20px 0', 'fontWeight': 'bold'}),
         html.H2("Filters", style={'marginBottom': '20px'}),
 
         html.Label("Date Range"),
@@ -28,7 +40,7 @@ app.layout = html.Div([
             start_date=df['date'].min(),
             end_date=df['date'].max(),
             display_format='YYYY-MM-DD',
-            style={'marginBottom': '20px'}
+            style={'marginBottom': '20px', 'width': '100%'}
         ),
 
         html.Label("Participant Size Filter"),
@@ -76,42 +88,53 @@ app.layout = html.Div([
         dcc.Download(id="download-data")
     ], style={
         'width': '280px',
-        'padding': '20px',
+        'padding': '24px',
         'boxSizing': 'border-box',
         'backgroundColor': '#f9f9f9',
         'borderRight': '1px solid #ccc',
         'flexShrink': '0',
-        'flexGrow': '1'
+        'flexGrow': '1',
+        'height': '100vh',
+        'overflowY': 'auto',
+        'overflow': 'visible',  # <-- Add this line
+        'boxShadow': '2px 0 8px rgba(0,0,0,0.07)',
+        'borderRadius': '0 12px 12px 0',
+        'position': 'relative',
+        'zIndex': 1050
     }),
 
+    # Main content
     html.Div([
         html.Div(id='kpi-cards', style={
             'display': 'flex',
             'justifyContent': 'space-around',
-            'margin': '10px 0'
+            'margin': '24px 0 24px 0',
+            'gap': '16px'
         }),
 
         html.Div([
-            dcc.Graph(id='map-graph', style={'height': '320px', 'marginBottom': '20px'}),
-            dcc.Graph(id='momentum-graph', style={'height': '250px', 'marginBottom': '20px'}),
-            dcc.Graph(id='daily-graph', style={'height': '250px'})
+            dcc.Graph(id='map-graph', style={'height': '320px', 'marginBottom': '24px', 'borderRadius': '10px', 'backgroundColor': '#fff', 'boxShadow': '0 2px 8px rgba(0,0,0,0.05)'}),
+            dcc.Graph(id='momentum-graph', style={'height': '250px', 'marginBottom': '24px', 'borderRadius': '10px', 'backgroundColor': '#fff', 'boxShadow': '0 2px 8px rgba(0,0,0,0.05)'}),
+            dcc.Graph(id='daily-graph', style={'height': '250px', 'borderRadius': '10px', 'backgroundColor': '#fff', 'boxShadow': '0 2px 8px rgba(0,0,0,0.05)'})
         ], style={'minWidth': '0'})
     ], style={
         'width': 'calc(100% - 280px)',
-        'padding': '10px',
+        'padding': '24px',
         'boxSizing': 'border-box',
         'flexGrow': '1',
-        'overflow': 'auto'
+        'overflow': 'auto',
+        'backgroundColor': '#f5f6fa',
+        'borderRadius': '12px 0 0 12px'
     })
 ], style={
     'display': 'flex',
     'flexDirection': 'row',
-    'flexWrap': 'wrap',
+    'flexWrap': 'nowrap',
     'height': '100vh',
     'overflow': 'hidden',
-    'fontFamily': 'Arial, sans-serif'
+    'fontFamily': 'Arial, sans-serif',
+    'backgroundColor': '#e9ecef'
 })
-
 
 @app.callback(
     [Output('map-graph', 'figure'),
@@ -237,16 +260,48 @@ def update_all(start_date, end_date, size_filter, trump_filter, org_search):
     dff_momentum = dff_momentum.reset_index()
 
     fig_momentum = go.Figure()
-    fig_momentum.add_trace(go.Scatter(x=dff_momentum['date'], y=dff_momentum['momentum'], mode='lines', name='Original Momentum'))
-    fig_momentum.add_trace(go.Scatter(x=dff_momentum['date'], y=dff_momentum['alt_momentum'], mode='lines', name='7-Day Rolling Total'))
-    fig_momentum.update_layout(title="Momentum of Dissent", height=270, margin=dict(t=30, b=10, l=10, r=10))  # Shorter, less padding
+    fig_momentum.add_trace(go.Scatter(
+        x=dff_momentum['date'], 
+        y=dff_momentum['momentum'], 
+        mode='lines', 
+        name='Original Momentum'
+    ))
+    fig_momentum.add_trace(go.Scatter(
+        x=dff_momentum['date'], 
+        y=dff_momentum['alt_momentum'], 
+        mode='lines', 
+        name='7-Day Rolling Total'
+    ))
+
+    # Add linear trendline to the momentum plot
+    if len(dff_momentum) > 1:
+        # Remove Na for fitting
+        trend_df = dff_momentum.dropna(subset=['momentum'])
+        if len(trend_df) > 1:
+            # Convert dates to ordinal for fitting
+            x_ord = trend_df['date'].map(pd.Timestamp.toordinal)
+            y = trend_df['momentum']
+            coeffs = np.polyfit(x_ord, y, 1)
+            trendline = np.polyval(coeffs, x_ord)
+            fig_momentum.add_trace(go.Scatter(
+                x=trend_df['date'],
+                y=trendline,
+                mode='lines',
+                name='Trendline',
+                line=dict(dash='dash', color='black')
+            ))
+
+    fig_momentum.update_layout(
+        title="Momentum of Dissent",
+        height=270,
+        margin=dict(t=30, b=10, l=10, r=10)
+    )  # Shorter, less padding
 
     dff_daily = dff.set_index('date').resample('D').size().reset_index(name='count')
     fig_daily = px.bar(dff_daily, x='date', y='count', title="Daily Event Count", height=270)
     fig_daily.update_layout(margin=dict(t=30, b=10, l=10, r=10))  # Shorter, less padding
 
     return fig_map, fig_momentum, fig_daily, kpis
-
 
 @app.callback(
     Output("download-data", "data"),
@@ -277,6 +332,9 @@ def download_csv(n_clicks, choice, start_date, end_date, size_filter, trump_filt
 
     return dcc.send_data_frame(export_df.to_csv, "protest_data.csv", index=False)
 
+@app.callback(Output('page-content', 'children'), Input('url', 'pathname'))
+def display_page(pathname):
+    return dashboard_layout
 
 if __name__ == '__main__':
     app.run(host='127.0.0.1', port=8050, debug=True)
