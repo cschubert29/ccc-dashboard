@@ -19,6 +19,7 @@ df['targets'] = df['targets'].astype(str).str.lower()
 df['organizations'] = df['organizations'].astype(str).str.lower()
 
 app = Dash(__name__, suppress_callback_exceptions=True)
+server = app.server
 app.title = "Protest Dashboard"
 
 app.layout = html.Div([
@@ -33,7 +34,7 @@ dashboard_layout = html.Div([
     html.Div([
         # dcc.Link('📥 Submit New Protest Event', href='/submit', style={'display': 'block', 'margin': '10px 0 20px 0', 'fontWeight': 'bold'}),
         html.H2("Filters", style={'marginBottom': '20px'}),
-
+git a
         html.Label("Date Range"),
         dcc.DatePickerRange(
             id='date-range',
