@@ -34,7 +34,7 @@ dashboard_layout = html.Div([
     html.Div([
         # dcc.Link('📥 Submit New Protest Event', href='/submit', style={'display': 'block', 'margin': '10px 0 20px 0', 'fontWeight': 'bold'}),
         html.H2("Filters", style={'marginBottom': '20px'}),
-git a
+
         html.Label("Date Range"),
         dcc.DatePickerRange(
             id='date-range',
