@@ -1,1 +1,1 @@
-web: gunicorn ccc_test:app
+web: gunicorn app:app
