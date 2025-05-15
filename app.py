@@ -7,7 +7,7 @@ import csv
 import os
 
 
-file_path = "C:/Users/jamie/OneDrive/Documents/CCC Project/ccc-phase3-public.csv"
+file_path = "ccc-phase3-public.csv"
 US_POPULATION = 340_100_000
 
 # Load data
