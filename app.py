@@ -165,7 +165,7 @@ def update_all(start_date, end_date, size_filter, trump_filter, org_search):
     total_events = len(dff)
     total_participants = dff['size_mean'].sum()
     percent_us_pop = (total_participants / US_POPULATION) * 100
-    cumulative_total_events = len(df)  
+    cumulative_total_events = len(dff)  # <-- update to use filtered dataframe
     mean_size = dff['size_mean'].mean()
 
 
