@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 from dash import Dash, dcc, html, Input, Output, State, ctx
 import csv
 import os
+import random
 
 
 file_path = "ccc-phase3-public.csv"
@@ -137,6 +138,24 @@ dashboard_layout = html.Div([
     'backgroundColor': '#e9ecef'
 })
 
+def jitter_coords(df, lat_col='lat', lon_col='lon', jitter_amount=0.08):
+    """Add random jitter to duplicate lat/lon pairs in a DataFrame."""
+    df = df.copy().reset_index(drop=True)  # Ensure integer index
+    coords = df[[lat_col, lon_col]].astype(str).agg('_'.join, axis=1)
+    counts = coords.value_counts()
+    dup_coords = counts[counts > 1].index
+
+    for coord in dup_coords:
+        idxs = df.index[coords == coord].tolist()
+        for offset, i in enumerate(idxs):
+            if offset == 0:
+                continue  # Leave the first as is
+            angle = random.uniform(0, 2 * np.pi)
+            radius = random.uniform(0.0005, jitter_amount)
+            df.at[i, lat_col] += np.cos(angle) * radius
+            df.at[i, lon_col] += np.sin(angle) * radius
+    return df
+
 @app.callback(
     [Output('map-graph', 'figure'),
      Output('momentum-graph', 'figure'),
@@ -164,8 +183,10 @@ def update_all(start_date, end_date, size_filter, trump_filter, org_search):
 
     total_events = len(dff)
     total_participants = dff['size_mean'].sum()
-    percent_us_pop = (total_participants / US_POPULATION) * 100
-    cumulative_total_events = len(dff)  # <-- update to use filtered dataframe
+    # Use peak single-day turnout for percent_us_pop
+    peak_day = dff.groupby('date')['size_mean'].sum().max()
+    percent_us_pop = (peak_day / US_POPULATION) * 100 if peak_day else 0
+    cumulative_total_events = len(dff)
     mean_size = dff['size_mean'].mean()
 
 
@@ -198,6 +219,8 @@ def update_all(start_date, end_date, size_filter, trump_filter, org_search):
     ]
 
     dff_map = dff.dropna(subset=['lat', 'lon']).copy()
+    dff_map = jitter_coords(dff_map, lat_col='lat', lon_col='lon', jitter_amount=0.03)  # Add jitter here
+
     has_size = dff_map[dff_map['size_mean'].notna()]
     no_size = dff_map[dff_map['size_mean'].isna()]
 
