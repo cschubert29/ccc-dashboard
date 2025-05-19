@@ -200,7 +200,8 @@ dashboard_layout = html.Div([
         html.Div([
             dcc.Graph(id='map-graph', style={'height': '320px', 'marginBottom': '24px', 'borderRadius': '10px', 'backgroundColor': '#fff', 'boxShadow': '0 2px 8px rgba(0,0,0,0.05)'}),
             dcc.Graph(id='momentum-graph', style={'height': '250px', 'marginBottom': '24px', 'borderRadius': '10px', 'backgroundColor': '#fff', 'boxShadow': '0 2px 8px rgba(0,0,0,0.05)'}),
-            dcc.Graph(id='daily-graph', style={'height': '250px', 'borderRadius': '10px', 'backgroundColor': '#fff', 'boxShadow': '0 2px 8px rgba(0,0,0,0.05)'})
+            dcc.Graph(id='daily-graph', style={'height': '250px', 'marginBottom': '24px', 'borderRadius': '10px', 'backgroundColor': '#fff', 'boxShadow': '0 2px 8px rgba(0,0,0,0.05)'}),
+            dcc.Graph(id='cumulative-graph', style={'height': '250px', 'borderRadius': '10px', 'backgroundColor': '#fff', 'boxShadow': '0 2px 8px rgba(0,0,0,0.05)'})
         ], style={'minWidth': '0'})
     ], style={
         'width': 'calc(100% - 280px)',
@@ -244,13 +245,14 @@ def jitter_coords(df, lat_col='lat', lon_col='lon', jitter_amount=0.05):
      Output('momentum-graph', 'figure'),
      Output('daily-graph', 'figure'),
      Output('kpi-cards', 'children'),
-     Output('filtered-data', 'data')],  
+     Output('filtered-data', 'data'),
+     Output('cumulative-graph', 'figure')],  # <-- add this
     [Input('date-range', 'start_date'),
      Input('date-range', 'end_date'),
      Input('size-filter', 'value'),
      Input('trump-filter', 'value'),
      Input('org-search', 'value'),
-     Input('state-filter', 'value')]  \
+     Input('state-filter', 'value')]
 )
 def update_all(start_date, end_date, size_filter, trump_filter, org_search, state_filter):
     dff = df.copy()
@@ -301,12 +303,7 @@ def update_all(start_date, end_date, size_filter, trump_filter, org_search, stat
             'padding': '10px',
             'borderRadius': '8px',
             'backgroundColor': '#f0f0f0'
-        }),
-
-        html.Div([
-            html.H3(f"{cumulative_total_events:,}", style={'color': '#555'}),
-            html.P("Cumulative Total Events")
-        ], style={'width': '24%', 'textAlign': 'center', 'padding': '10px', 'borderRadius': '8px', 'backgroundColor': '#f0f0f0'})
+        })
     ]
 
     dff_map = dff.dropna(subset=['lat', 'lon']).copy()
@@ -449,7 +446,20 @@ def update_all(start_date, end_date, size_filter, trump_filter, org_search, stat
     )
     fig_daily.update_layout(margin=dict(t=30, b=10, l=10, r=10))  # Shorter, less padding
 
-    return fig_map, fig_momentum, fig_daily, kpis, dff.to_json(date_format='iso', orient='split')
+    # Cumulative total events by date
+    dff_cum = dff.set_index('date').resample('D').size().reset_index(name='count')
+    dff_cum['cumulative'] = dff_cum['count'].cumsum()
+    fig_cumulative = px.line(
+        dff_cum,
+        x='date',
+        y='cumulative',
+        title="Cumulative Total Events",
+        height=250,
+        template="plotly_white"
+    )
+    fig_cumulative.update_layout(margin=dict(t=30, b=10, l=10, r=10))
+
+    return fig_map, fig_momentum, fig_daily, kpis, dff.to_json(date_format='iso', orient='split'), fig_cumulative
 
 @app.callback(
     Output("download-data", "data"),
@@ -540,12 +550,7 @@ def show_event_details(clickData, filtered_json):
         html.Div(event_items)
     ])
 
-@app.callback(
-    Output('event-detail-content', 'children'),
-    Input('event-dropdown', 'value'),
-    State('map-graph', 'clickData'),
-    State('filtered-data', 'data')
-)
+
 def update_event_detail(selected_idx, clickData, filtered_json):
     if not clickData or 'points' not in clickData or not clickData['points']:
         return ""
