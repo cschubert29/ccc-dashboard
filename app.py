@@ -9,7 +9,8 @@ import random
 import re
 from dash.dependencies import Input, Output, State
 from dash import no_update
-
+from flask_caching import Cache
+import cProfile
 
 file_path = "ccc-phase3-public.csv"
 US_POPULATION = 340_100_000
@@ -21,10 +22,19 @@ df['size_mean'] = pd.to_numeric(df['size_mean'], errors='coerce')
 df['participants_numeric'] = df['size_mean']
 df['targets'] = df['targets'].astype(str).str.lower()
 df['organizations'] = df['organizations'].astype(str).str.lower()
+df['state'] = df['state'].astype('category')
+df['targets'] = df['targets'].astype('category')
+df['organizations'] = df['organizations'].astype('category')
 
 app = Dash(__name__, suppress_callback_exceptions=True)
 server = app.server
 app.title = "Protest Dashboard"
+
+# Configure caching
+cache = Cache(app.server, config={
+    'CACHE_TYPE': 'filesystem',
+    'CACHE_DIR': 'cache-directory'
+})
 
 app.layout = html.Div([
     dcc.Location(id='url', refresh=False),
@@ -88,6 +98,90 @@ filter_panel = html.Div([
         placeholder="Select state(s) or territory(ies)",
         clearable=True,
         style={'marginBottom': '20px'}
+    ),
+
+    html.Label("Participant Injuries"),
+    dcc.Dropdown(
+        id='participant-injuries-filter',
+        options=[
+            {'label': 'All', 'value': 'all'},
+            {'label': 'Missing (NA)', 'value': 'na'},
+            {'label': 'Zero', 'value': 'zero'},
+            {'label': 'Nonzero', 'value': 'nonzero'}
+        ],
+        value='all',
+        clearable=False,
+        style={'marginBottom': '10px'}
+    ),
+
+    html.Label("Police Injuries"),
+    dcc.Dropdown(
+        id='police-injuries-filter',
+        options=[
+            {'label': 'All', 'value': 'all'},
+            {'label': 'Missing (NA)', 'value': 'na'},
+            {'label': 'Zero', 'value': 'zero'},
+            {'label': 'Nonzero', 'value': 'nonzero'}
+        ],
+        value='all',
+        clearable=False,
+        style={'marginBottom': '10px'}
+    ),
+
+    html.Label("Arrests"),
+    dcc.Dropdown(
+        id='arrests-filter',
+        options=[
+            {'label': 'All', 'value': 'all'},
+            {'label': 'Missing (NA)', 'value': 'na'},
+            {'label': 'Zero', 'value': 'zero'},
+            {'label': 'Nonzero', 'value': 'nonzero'}
+        ],
+        value='all',
+        clearable=False,
+        style={'marginBottom': '10px'}
+    ),
+
+    html.Label("Property Damage"),
+    dcc.Dropdown(
+        id='property-damage-filter',
+        options=[
+            {'label': 'All', 'value': 'all'},
+            {'label': 'Missing (NA)', 'value': 'na'},
+            {'label': 'Zero', 'value': 'zero'},
+            {'label': 'Nonzero', 'value': 'nonzero'}
+        ],
+        value='all',
+        clearable=False,
+        style={'marginBottom': '10px'}
+    ),
+
+    html.Label("Participant Deaths"),
+    dcc.Dropdown(
+        id='participant-deaths-filter',
+        options=[
+            {'label': 'All', 'value': 'all'},
+            {'label': 'Missing (NA)', 'value': 'na'},
+            {'label': 'Zero', 'value': 'zero'},
+            {'label': 'Nonzero', 'value': 'nonzero'}
+        ],
+        value='all',
+        clearable=False,
+        style={'marginBottom': '10px'}
+    ),
+
+    html.Label("Police Deaths"),
+    dcc.Dropdown(
+        id='police-deaths-filter',
+        options=[
+            {'label': 'All', 'value': 'all'},
+            {'label': 'Missing (NA)', 'value': 'na'},
+            {'label': 'Zero', 'value': 'zero'},
+            {'label': 'Nonzero', 'value': 'nonzero'}
+        ],
+        value='all',
+        clearable=False,
+        style={'marginBottom': '10px'}
     ),
 
     html.Label("Download Data"),
@@ -201,7 +295,8 @@ dashboard_layout = html.Div([
             dcc.Graph(id='map-graph', style={'height': '320px', 'marginBottom': '24px', 'borderRadius': '10px', 'backgroundColor': '#fff', 'boxShadow': '0 2px 8px rgba(0,0,0,0.05)'}),
             dcc.Graph(id='momentum-graph', style={'height': '250px', 'marginBottom': '24px', 'borderRadius': '10px', 'backgroundColor': '#fff', 'boxShadow': '0 2px 8px rgba(0,0,0,0.05)'}),
             dcc.Graph(id='daily-graph', style={'height': '250px', 'marginBottom': '24px', 'borderRadius': '10px', 'backgroundColor': '#fff', 'boxShadow': '0 2px 8px rgba(0,0,0,0.05)'}),
-            dcc.Graph(id='cumulative-graph', style={'height': '250px', 'borderRadius': '10px', 'backgroundColor': '#fff', 'boxShadow': '0 2px 8px rgba(0,0,0,0.05)'})
+            dcc.Graph(id='cumulative-graph', style={'height': '250px', 'borderRadius': '10px', 'backgroundColor': '#fff', 'boxShadow': '0 2px 8px rgba(0,0,0,0.05)'}),
+            dcc.Graph(id='daily-participant-graph', style={'height': '250px', 'marginBottom': '24px', 'borderRadius': '10px', 'backgroundColor': '#fff', 'boxShadow': '0 2px 8px rgba(0,0,0,0.05)'})
         ], style={'minWidth': '0'})
     ], style={
         'width': 'calc(100% - 280px)',
@@ -240,39 +335,149 @@ def jitter_coords(df, lat_col='lat', lon_col='lon', jitter_amount=0.05):
             df.at[i, lon_col] += np.sin(angle) * radius
     return df
 
+@cache.memoize(timeout=120)
+def filter_data(
+    start_date, end_date, size_filter, trump_filter, org_search, state_filter,
+    participant_injuries_filter, police_injuries_filter, arrests_filter, property_damage_filter,
+    participant_deaths_filter, police_deaths_filter
+):
+    dff = df
+    mask = pd.Series([True] * len(dff))
+    if start_date and end_date:
+        mask &= (dff['date'] >= start_date) & (dff['date'] <= end_date)
+    if size_filter == 'has':
+        mask &= dff['size_mean'].notna()
+    elif size_filter == 'no':
+        mask &= dff['size_mean'].isna()
+    if 'trump' in trump_filter:
+        mask &= dff['targets'].str.contains("trump", na=False)
+    if org_search:
+        org_terms = [o.strip().lower() for o in org_search.split(',') if o.strip()]
+        if org_terms:
+            pattern = '|'.join([re.escape(org) for org in org_terms])
+            mask &= dff['organizations'].str.contains(pattern, na=False, regex=True)
+    if state_filter:
+        mask &= dff['state'].isin(state_filter)
+
+    if participant_injuries_filter == 'na':
+        mask &= dff['participant_injuries'].isna()
+    elif participant_injuries_filter == 'zero':
+        mask &= dff['participant_injuries'].fillna(-1) == 0
+    elif participant_injuries_filter == 'nonzero':
+        mask &= dff['participant_injuries'].fillna(0) > 0
+
+    if police_injuries_filter == 'na':
+        mask &= dff['police_injuries'].isna()
+    elif police_injuries_filter == 'zero':
+        mask &= dff['police_injuries'].fillna(-1) == 0
+    elif police_injuries_filter == 'nonzero':
+        mask &= dff['police_injuries'].fillna(0) > 0
+
+    if arrests_filter == 'na':
+        mask &= dff['arrests'].isna()
+    elif arrests_filter == 'zero':
+        mask &= dff['arrests'].fillna(-1) == 0
+    elif arrests_filter == 'nonzero':
+        mask &= dff['arrests'].fillna(0) > 0
+
+    if property_damage_filter == 'na':
+        mask &= dff['property_damage'].isna()
+    elif property_damage_filter == 'zero':
+        mask &= dff['property_damage'].fillna(-1) == 0
+    elif property_damage_filter == 'nonzero':
+        mask &= dff['property_damage'].fillna(0) > 0
+
+    if participant_deaths_filter == 'na':
+        mask &= dff['participant_deaths'].isna()
+    elif participant_deaths_filter == 'zero':
+        mask &= dff['participant_deaths'].fillna(-1) == 0
+    elif participant_deaths_filter == 'nonzero':
+        mask &= dff['participant_deaths'].fillna(0) > 0
+
+    if police_deaths_filter == 'na':
+        mask &= dff['police_deaths'].isna()
+    elif police_deaths_filter == 'zero':
+        mask &= dff['police_deaths'].fillna(-1) == 0
+    elif police_deaths_filter == 'nonzero':
+        mask &= dff['police_deaths'].fillna(0) > 0
+
+    dff = dff[mask]
+    if org_search and org_terms and 'id' in dff.columns:
+        dff = dff.drop_duplicates(subset='id')
+    return dff
+
+@cache.memoize(timeout=120)
+def aggregate_events_for_map(dff_map):
+    df = dff_map.copy()
+
+    # Compose a simple location label
+    def best_location(row):
+        loc = str(row.get('location', '')).strip()
+        if loc and loc.lower() != 'nan':
+            return loc
+        loc2 = str(row.get('locality', '')).strip()
+        if loc2 and loc2.lower() != 'nan':
+            return loc2
+        state = row.get('state', 'Unknown')
+        date = row['date'].date() if pd.notnull(row.get('date')) else ''
+        return f"{state}, {date}"
+
+    df['location_label'] = df.apply(best_location, axis=1)
+    df['location_label'] = df['location_label'].replace('', np.nan).fillna('Unknown')
+    df['event_label'] = df.apply(
+        lambda row: f"{row.get('title', 'No Title')} ({row['date'].date() if pd.notnull(row['date']) else ''})<br>Org: {row.get('organizations', 'Unknown')}", axis=1
+    )
+    df = df.dropna(subset=['lat', 'lon'])
+    agg = df.groupby('location_label').agg(
+        lat=('lat', 'first'),
+        lon=('lon', 'first'),
+        count=('title', 'size'),
+        event_list=('event_label', lambda x: "<br><br>".join(x)),
+        title=('title', lambda x: "; ".join(x.astype(str))),
+        size_mean=('size_mean', lambda x: x.mean() if x.notna().any() else np.nan)
+    ).reset_index()
+    # Simple hover: always show location, count, and event list
+    agg['hover'] = agg.apply(
+        lambda row: (
+            f"<b>{row['location_label']}</b><br>"
+            f"Events at this site: {row['count']}<br><br>"
+            f"<b>Events:</b><br>{row['event_list']}"
+        ), axis=1
+    )
+    agg['text'] = agg['location_label']
+    return agg
+
 @app.callback(
     [Output('map-graph', 'figure'),
      Output('momentum-graph', 'figure'),
      Output('daily-graph', 'figure'),
      Output('kpi-cards', 'children'),
      Output('filtered-data', 'data'),
-     Output('cumulative-graph', 'figure')],  # <-- add this
+     Output('cumulative-graph', 'figure'),
+     Output('daily-participant-graph', 'figure')],  # <-- Add this line
     [Input('date-range', 'start_date'),
      Input('date-range', 'end_date'),
      Input('size-filter', 'value'),
      Input('trump-filter', 'value'),
      Input('org-search', 'value'),
-     Input('state-filter', 'value')]
+     Input('state-filter', 'value'),
+     Input('participant-injuries-filter', 'value'),
+     Input('police-injuries-filter', 'value'),
+     Input('arrests-filter', 'value'),
+     Input('property-damage-filter', 'value'),
+     Input('participant-deaths-filter', 'value'),
+     Input('police-deaths-filter', 'value')]
 )
-def update_all(start_date, end_date, size_filter, trump_filter, org_search, state_filter):
-    dff = df.copy()
-
-    if start_date and end_date:
-        dff = dff[(dff['date'] >= start_date) & (dff['date'] <= end_date)]
-    if size_filter == 'has':
-        dff = dff[dff['size_mean'].notna()]
-    elif size_filter == 'no':
-        dff = dff[dff['size_mean'].isna()]
-    if 'trump' in trump_filter:
-        dff = dff[dff['targets'].str.contains("trump", na=False)]
-    if org_search:
-        org_terms = [o.strip().lower() for o in org_search.split(',') if o.strip()]
-        pattern = '|'.join([re.escape(org) for org in org_terms])
-        if pattern:
-            dff = dff[dff['organizations'].str.contains(pattern, na=False, regex=True)]
-            dff = dff.drop_duplicates(subset='id' if 'id' in dff.columns else None)
-    if state_filter:
-        dff = dff[dff['state'].isin(state_filter)]
+def update_all(
+    start_date, end_date, size_filter, trump_filter, org_search, state_filter,
+    participant_injuries_filter, police_injuries_filter, arrests_filter, property_damage_filter,
+    participant_deaths_filter, police_deaths_filter
+):
+    dff = filter_data(
+        start_date, end_date, size_filter, trump_filter, org_search, state_filter,
+        participant_injuries_filter, police_injuries_filter, arrests_filter, property_damage_filter,
+        participant_deaths_filter, police_deaths_filter
+    )
 
     total_events = len(dff)
     total_participants = dff['size_mean'].sum()
@@ -281,6 +486,9 @@ def update_all(start_date, end_date, size_filter, trump_filter, org_search, stat
     percent_us_pop = (peak_day / US_POPULATION) * 100 if peak_day else 0
     cumulative_total_events = len(dff)
     mean_size = dff['size_mean'].mean()
+    percent_no_size = 0
+    if total_events > 0:
+        percent_no_size = 100 * dff['size_mean'].isna().sum() / total_events
 
 
     kpis = [
@@ -303,39 +511,23 @@ def update_all(start_date, end_date, size_filter, trump_filter, org_search, stat
             'padding': '10px',
             'borderRadius': '8px',
             'backgroundColor': '#f0f0f0'
+        }),
+
+        html.Div([
+            html.H3(f"{percent_no_size:.1f}%", style={'color': 'red'}),
+            html.P("Events Missing Size")
+        ], style={
+            'width': '24%',
+            'textAlign': 'center',
+            'padding': '10px',
+            'borderRadius': '8px',
+            'backgroundColor': '#f0f0f0'
         })
     ]
 
-    dff_map = dff.dropna(subset=['lat', 'lon']).copy()
+    dff_map = dff.dropna(subset=['lat', 'lon'])
     dff_map = jitter_coords(dff_map, lat_col='lat', lon_col='lon', jitter_amount=0.03)
-
-    # Group by location (not coordinates), aggregate events at each site
-    def aggregate_events(df):
-        # Pre-format event title/date/org for all events
-        df = df.copy()
-        df['event_label'] = df.apply(
-            lambda row: f"{row['title']} ({row['date'].date() if pd.notnull(row['date']) else ''})<br>Org: {row['organizations']}", axis=1
-        )
-        # Aggregate by location
-        agg = df.groupby('location').agg(
-            lat=('lat', 'first'),
-            lon=('lon', 'first'),
-            count=('title', 'size'),
-            event_list=('event_label', lambda x: "<br><br>".join(x)),
-            title=('title', lambda x: "; ".join(x.astype(str))),
-            size_mean=('size_mean', lambda x: x.mean() if x.notna().any() else np.nan)
-        ).reset_index()
-        agg['text'] = agg.apply(lambda row: f"{row['location']} ({row['count']} event{'s' if row['count'] > 1 else ''})", axis=1)
-        agg['hover'] = agg.apply(
-            lambda row: (
-                f"<b>{row['location']}</b><br>"
-                f"Events at this site: {row['count']}<br><br>"
-                f"<b>Events:</b><br>{row['event_list']}"
-            ), axis=1
-        )
-        return agg
-
-    agg_map = aggregate_events(dff_map)
+    agg_map = aggregate_events_for_map(dff_map)
 
     # Separate locations with and without participant size
     has_size = agg_map[agg_map['size_mean'].notna()]
@@ -459,7 +651,19 @@ def update_all(start_date, end_date, size_filter, trump_filter, org_search, stat
     )
     fig_cumulative.update_layout(margin=dict(t=30, b=10, l=10, r=10))
 
-    return fig_map, fig_momentum, fig_daily, kpis, dff.to_json(date_format='iso', orient='split'), fig_cumulative
+    # Daily participant count (sum of size_mean per day)
+    dff_participants = dff.set_index('date').resample('D')['size_mean'].sum().reset_index(name='participants')
+    fig_daily_participants = px.bar(
+        dff_participants,
+        x='date',
+        y='participants',
+        title="Daily Participant Count",
+        height=250,
+        template="plotly_white"
+    )
+    fig_daily_participants.update_layout(margin=dict(t=30, b=10, l=10, r=10))
+
+    return fig_map, fig_momentum, fig_daily, kpis, dff.to_json(date_format='iso', orient='split'), fig_cumulative, fig_daily_participants
 
 @app.callback(
     Output("download-data", "data"),
@@ -471,30 +675,33 @@ def update_all(start_date, end_date, size_filter, trump_filter, org_search, stat
     State('trump-filter', 'value'),
     State('org-search', 'value'),
     State('state-filter', 'value'),
+    State('participant-injuries-filter', 'value'),
+    State('police-injuries-filter', 'value'),
+    State('arrests-filter', 'value'),
+    State('property-damage-filter', 'value'),
+    State('arrests-any-filter', 'value'),
+    State('participant-casualties-any-filter', 'value'),
+    State('police-casualties-any-filter', 'value'),
+    State('property-damage-any-filter', 'value'),
+    State('participant-deaths-filter', 'value'),
+    State('police-deaths-filter', 'value'),
     prevent_initial_call=True
 )
-def download_csv(n_clicks, choice, start_date, end_date, size_filter, trump_filter, org_search, state_filter):
+def download_csv(
+    n_clicks, choice, start_date, end_date, size_filter, trump_filter, org_search, state_filter,
+    participant_injuries_filter, police_injuries_filter, arrests_filter, property_damage_filter,
+    arrests_any_filter, participant_casualties_any_filter, police_casualties_any_filter,
+    property_damage_any_filter, participant_deaths_filter, police_deaths_filter
+):
     if choice == 'full':
-        export_df = df.copy()
+        export_df = df
     else:
-        export_df = df.copy()
-        if start_date and end_date:
-            export_df = export_df[(export_df['date'] >= start_date) & (export_df['date'] <= end_date)]
-        if size_filter == 'has':
-            export_df = export_df[export_df['size_mean'].notna()]
-        elif size_filter == 'no':
-            export_df = export_df[export_df['size_mean'].isna()]
-        if 'trump' in trump_filter:
-            export_df = export_df[export_df['targets'].str.contains("trump", na=False)]
-        if org_search:
-            org_terms = [o.strip().lower() for o in org_search.split(',') if o.strip()]
-            pattern = '|'.join([re.escape(org) for org in org_terms])
-            if pattern:
-                export_df = export_df[export_df['organizations'].str.contains(pattern, na=False, regex=True)]
-                export_df = export_df.drop_duplicates(subset='id' if 'id' in export_df.columns else None)
-        if state_filter:
-            export_df = export_df[export_df['state'].isin(state_filter)]
-
+        export_df = filter_data(
+            start_date, end_date, size_filter, trump_filter, org_search, state_filter,
+            participant_injuries_filter, police_injuries_filter, arrests_filter, property_damage_filter,
+            arrests_any_filter, participant_casualties_any_filter, police_casualties_any_filter,
+            property_damage_any_filter, participant_deaths_filter, police_deaths_filter
+        )
     return dcc.send_data_frame(export_df.to_csv, "protest_data.csv", index=False)
 
 @app.callback(Output('page-content', 'children'), Input('url', 'pathname'))
@@ -529,7 +736,11 @@ def show_event_details(clickData, filtered_json):
     dff = pd.read_json(filtered_json, orient='split')
     point = clickData['points'][0]
     location = point['text'].split(' (')[0]
-    events = dff[dff['location'] == location]
+    # Use location_label for lookup
+    if 'location_label' in dff.columns:
+        events = dff[dff['location_label'] == location]
+    else:
+        events = dff[dff['location'] == location]
     if events.empty:
         return "No events found for this location."
 
@@ -551,25 +762,9 @@ def show_event_details(clickData, filtered_json):
     ])
 
 
-def update_event_detail(selected_idx, clickData, filtered_json):
-    if not clickData or 'points' not in clickData or not clickData['points']:
-        return ""
-    if not filtered_json:
-        return ""
-    dff = pd.read_json(filtered_json, orient='split')
-    location = clickData['points'][0]['text'].split(' (')[0]
-    events = dff[dff['location'] == location]
-    if selected_idx not in events.index:
-        return ""
-    row = events.loc[selected_idx]
-    return html.Div([
-        html.H4(row['title']),
-        html.P(f"Date: {row['date'].date() if pd.notnull(row['date']) else ''}"),
-        html.P(f"Size: {row['size_mean'] if pd.notnull(row['size_mean']) else 'Unknown'}"),
-        html.P(f"Organizations: {row['organizations']}"),
-        html.P(f"Claims: {row.get('claims_summary', '')}"),
-        html.P(f"Notes: {row['notes'] if 'notes' in row else ''}")
-    ])
-
+pr = cProfile.Profile()
+pr.enable()
 if __name__ == '__main__':
     app.run(host='127.0.0.1', port=8050, debug=True)
+pr.disable()
+pr.print_stats(sort='cumtime')
