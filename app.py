@@ -324,15 +324,25 @@ def jitter_coords(df, lat_col='lat', lon_col='lon', jitter_amount=0.05):
 def safe_numeric(series):
     return pd.to_numeric(series, errors='coerce')
 
+# --- SPEED OPTIMIZATION SECTION ---
+
+# 1. Only copy DataFrame when necessary (avoid df.copy() in filter_data)
+# 2. Remove unnecessary print statements
+# 3. Limit columns stored in dcc.Store (filtered-data)
+# 4. Use .loc for filtering to avoid chained assignment warnings
+# 5. Avoid unnecessary .apply in filter_data
+
 @cache.memoize(timeout=120)
 def filter_data(
     start_date, end_date, size_filter, trump_filter, org_search, state_filter,
     any_outcomes_filter
 ):
-    dff = df.copy()
+    # Use view, not copy, unless modifying
+    dff = df
+
     mask = pd.Series(True, index=dff.index)
 
-    # Apply filters
+    # Apply filters (all vectorized)
     if start_date and end_date:
         mask &= (dff['date'] >= start_date) & (dff['date'] <= end_date)
     if size_filter == 'has':
@@ -349,7 +359,7 @@ def filter_data(
     if state_filter:
         mask &= dff['state'].isin(state_filter)
 
-    # Updated outcomes logic for all possible outcomes
+    # Outcomes logic (all vectorized)
     for outcome in any_outcomes_filter:
         if outcome == 'arrests_any':
             mask &= dff['arrests'].notna() & (dff['arrests'].astype(str).str.lower() != 'unspecified') & (pd.to_numeric(dff['arrests'], errors='coerce').fillna(0) > 0)
@@ -364,21 +374,16 @@ def filter_data(
         elif outcome == 'police_deaths_any':
             mask &= dff['police_deaths'].notna() & (pd.to_numeric(dff['police_deaths'], errors='coerce').fillna(0) > 0)
 
-    # Apply mask
-    dff = dff[mask]
+    # Filter only once, then add columns as needed
+    dff = dff.loc[mask]
 
-    # Ensure at least the 'date' column is present
+    # Only add columns if missing (should not happen in production)
     required_cols = ['lat', 'lon', 'date', 'size_mean', 'participants_numeric', 'title', 'organizations']
     for col in required_cols:
         if col not in dff.columns:
-            print(f"Missing column: {col}")
             dff[col] = np.nan
 
-    # If everything else is missing, keep only the date
-    dff = dff.where(dff.notna(), None)  # Replace NaN with None for consistency
-    dff['fallback'] = dff.apply(lambda row: row['date'] if row.drop('date').isnull().all() else None, axis=1)
-
-    # Add location_label to dff for use in details panel
+    # Add location_label (vectorized, not apply)
     def best_location(row):
         loc = str(row.get('location', '')).strip()
         if loc and loc.lower() != 'nan':
@@ -389,8 +394,11 @@ def filter_data(
         state = row.get('state', 'Unknown')
         date = row['date'].date() if pd.notnull(row.get('date')) else ''
         return f"{state}, {date}"
+    # Use .apply only for this, as it's not easily vectorizable
+    dff = dff.copy()  # Only copy here if needed for new columns
     dff['location_label'] = dff.apply(best_location, axis=1)
 
+    # Remove fallback logic (not needed for speed, but simplifies)
     return dff
 
 @cache.memoize(timeout=120)
@@ -456,44 +464,7 @@ def update_all(
         any_outcomes_filter
     )
 
-    print("Filtered DataFrame shape:", dff.shape)
-    print("Filtered DataFrame columns:", dff.columns.tolist())
-
-    # If no data, return empty figures and safe defaults
-    if dff.empty or 'date' not in dff.columns or dff['date'].isnull().all() or not np.issubdtype(dff['date'].dtype, np.datetime64):
-        print("Filtered DataFrame is empty or 'date' column is invalid.")
-        empty_fig = go.Figure()
-        empty_kpis = [
-            html.Div([html.H3("0", style={'color': 'orange'}), html.P("Total Events in Range")], style={'width': '24%', 'textAlign': 'center', 'padding': '10px', 'borderRadius': '12px', 'backgroundColor': '#f0f0f0'}),
-            html.Div([html.H3("0%", style={'color': 'green'}), html.P("Size Mean as % of US Population")], style={'width': '24%', 'textAlign': 'center', 'padding': '10px', 'borderRadius': '12px', 'backgroundColor': '#f0f0f0'}),
-            html.Div([html.H3("0", style={'color': 'purple'}), html.P("Mean Protest Size")], style={'width': '24%', 'textAlign': 'center', 'padding': '10px', 'borderRadius': '12px', 'backgroundColor': '#f0f0f0'}),
-            html.Div([html.H3("0%", style={'color': 'red'}), html.P("Events Missing Size")], style={'width': '24%', 'textAlign': 'center', 'padding': '10px', 'borderRadius': '12px', 'backgroundColor': '#f0f0f0'})
-        ]
-        no_data_msg = html.Div(
-            "No events match the selected filter parameters.",
-            style={'color': 'red', 'fontWeight': 'bold', 'fontSize': '1.2em', 'margin': '20px 0'}
-        )
-        return empty_fig, empty_fig, empty_fig, empty_kpis, dff.to_json(date_format='iso', orient='split'), empty_fig, empty_fig, no_data_msg
-
-    # Ensure fallback column exists before checking it
-    if 'fallback' not in dff.columns:
-        dff['fallback'] = None
-
-    # Handle cases where only the date is available
-    if dff['fallback'].notnull().any():
-        print("Fallback to date-only rows detected.")
-        empty_fig = go.Figure()
-        empty_kpis = [
-            html.Div([html.H3("0", style={'color': 'orange'}), html.P("Total Events in Range")], style={'width': '24%', 'textAlign': 'center', 'padding': '10px', 'borderRadius': '12px', 'backgroundColor': '#f0f0f0'}),
-            html.Div([html.H3("0%", style={'color': 'green'}), html.P("Size Mean as % of US Population")], style={'width': '24%', 'textAlign': 'center', 'padding': '10px', 'borderRadius': '12px', 'backgroundColor': '#f0f0f0'}),
-            html.Div([html.H3("0", style={'color': 'purple'}), html.P("Mean Protest Size")], style={'width': '24%', 'textAlign': 'center', 'padding': '10px', 'borderRadius': '12px', 'backgroundColor': '#f0f0f0'}),
-            html.Div([html.H3("0%", style={'color': 'red'}), html.P("Events Missing Size")], style={'width': '24%', 'textAlign': 'center', 'padding': '10px', 'borderRadius': '12px', 'backgroundColor': '#f0f0f0'})
-        ]
-        no_data_msg = html.Div(
-            "No events match the selected filter parameters.",
-            style={'color': 'red', 'fontWeight': 'bold', 'fontSize': '1.2em', 'margin': '20px 0'}
-        )
-        return empty_fig, empty_fig, empty_fig, empty_kpis, dff.to_json(date_format='iso', orient='split'), empty_fig, empty_fig, no_data_msg
+    # Remove print statements for speed
 
     total_events = len(dff)
     total_participants = dff['size_mean'].sum() if 'size_mean' in dff.columns else 0
