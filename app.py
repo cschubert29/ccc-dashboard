@@ -2,12 +2,12 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from dash import Dash, dcc, html, Input, Output, State, ctx, no_update
+from dash import Dash, dcc, html, Input, Output, State, ctx, no_update, dash_table
 from flask_caching import Cache
 import os
 import random
 import re
-from dash import dash_table
+import time
 
 file_path = "ccc-phase3-public.csv"
 US_POPULATION = 340_100_000
@@ -40,6 +40,9 @@ cache = Cache(app.server, config={
     'CACHE_TYPE': 'filesystem',
     'CACHE_DIR': 'cache-directory'
 })
+
+if not os.path.exists('cache-directory'):
+    os.makedirs('cache-directory')
 
 # Sidebar content as separate components
 filter_panel = html.Div([
@@ -459,12 +462,18 @@ def update_all(
     start_date, end_date, size_filter, trump_filter, org_search, state_filter,
     any_outcomes_filter
 ):
+    t0 = time.time()
     dff = filter_data(
         start_date, end_date, size_filter, trump_filter, org_search, state_filter,
         any_outcomes_filter
     )
+    t1 = time.time()
+    
 
-    # Remove print statements for speed
+    dff_map = dff.dropna(subset=['lat', 'lon'])
+    dff_map = jitter_coords(dff_map, lat_col='lat', lon_col='lon', jitter_amount=0.03)
+    agg_map = aggregate_events_for_map(dff_map)
+    t2 = time.time()
 
     total_events = len(dff)
     total_participants = dff['size_mean'].sum() if 'size_mean' in dff.columns else 0
@@ -519,10 +528,6 @@ def update_all(
             )
         )
 
-    dff_map = dff.dropna(subset=['lat', 'lon'])
-    dff_map = jitter_coords(dff_map, lat_col='lat', lon_col='lon', jitter_amount=0.03)
-    agg_map = aggregate_events_for_map(dff_map)
-
     # Separate locations with and without participant size
     has_size = agg_map[agg_map['size_mean'].notna()]
     no_size = agg_map[agg_map['size_mean'].isna()]
@@ -532,11 +537,11 @@ def update_all(
     if not has_size.empty:
         max_size = has_size['size_mean'].max()
         sizeref = 2.0 * max_size / (50.0 ** 2) if max_size > 0 else 1
-        fig_map.add_trace(go.Scattermapbox(
+        fig_map.add_trace(go.Scattermap(
             lat=has_size['lat'],
             lon=has_size['lon'],
             mode='markers',
-            marker=go.scattermapbox.Marker(
+            marker=dict(
                 size=has_size['size_mean'],
                 color='blue',
                 sizemode='area',
@@ -550,11 +555,11 @@ def update_all(
 
     # Plot locations without participant size (red, fixed size)
     if not no_size.empty:
-        fig_map.add_trace(go.Scattermapbox(
+        fig_map.add_trace(go.Scattermap(
             lat=no_size['lat'],
             lon=no_size['lon'],
             mode='markers',
-            marker=go.scattermapbox.Marker(
+            marker=dict(
                 size=12,
                 color='red',
                 sizemode='area',
@@ -618,6 +623,7 @@ def update_all(
         height=270,
         margin=dict(t=30, b=10, l=10, r=10)
     )
+
     # Defensive: Ensure 'date' is datetime and not all-NaT before resampling
     if (
         'date' not in dff.columns or
@@ -676,7 +682,16 @@ def update_all(
                 template="plotly_white"
             )
             fig_daily_participants.update_layout(margin=dict(t=30, b=10, l=10, r=10))
-    return fig_map, fig_momentum, fig_daily, kpis, dff.to_json(date_format='iso', orient='split'), fig_cumulative, fig_daily_participants, None
+    
+    # Only store necessary columns in dcc.Store
+    store_cols = [
+        'lat', 'lon', 'date', 'size_mean', 'participants_numeric', 'title',
+        'organizations', 'location_label', 'locality', 'location', 'notables',
+        'targets', 'claims_summary', 'participant_measures', 'police_measures',
+        'participant_injuries', 'police_injuries', 'arrests', 'property_damage', 'notes'
+    ]
+    dff_store = dff[store_cols].copy() if all(col in dff.columns for col in store_cols) else dff.copy()
+    return fig_map, fig_momentum, fig_daily, kpis, dff_store.to_json(date_format='iso', orient='split'), fig_cumulative, fig_daily_participants, None
 
 @app.callback(
     Output('page-content', 'children'),
@@ -691,9 +706,6 @@ def display_page(pathname):
      Input('filtered-data', 'data')]
 )
 def show_event_details(clickData, filtered_json):
-    import pandas as pd
-    import numpy as np
-    from dash import dcc
 
     # Always show the sticky message if nothing is selected
     if not clickData or not filtered_json:
@@ -780,7 +792,7 @@ def show_event_details(clickData, filtered_json):
         )
     return details
 
-from dash import callback_context
+
 
 @app.callback(
     Output("download-data", "data"),
@@ -796,8 +808,6 @@ from dash import callback_context
     prevent_initial_call=True
 )
 def download_csv(n_clicks, choice, start_date, end_date, size_filter, trump_filter, org_search, state_filter, any_outcomes_filter):
-    import pandas as pd
-    from dash import dcc
 
     if not n_clicks:
         return no_update
@@ -825,5 +835,5 @@ def toggle_sidebar_content(n_clicks):
         return definitions_panel
     return filter_panel
 
-if __name__ == '__main__':
-    app.run(debug=False)
+# if __name__ == '__main__':
+#     app.run(debug=False)
