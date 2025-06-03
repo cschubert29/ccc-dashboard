@@ -928,5 +928,5 @@ def toggle_sidebar_content(n_clicks):
         return definitions_panel
     return filter_panel
 
-if __name__ == '__main__':
-    app.run(debug=True)
+# if __name__ == '__main__':
+#     app.run(debug=True)
