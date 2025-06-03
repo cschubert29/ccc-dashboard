@@ -272,6 +272,27 @@ with st.sidebar:
     }[x])
     show_definitions = st.toggle("Show Data Definitions & Sources", value=False)
 
+    # --- DOWNLOAD BUTTON MOVED TO SIDEBAR ---
+    if download_choice == 'full':
+        export_df = df.copy()
+    else:
+        export_df = filter_data(
+            df,
+            pd.to_datetime(start_date),
+            pd.to_datetime(end_date),
+            size_filter,
+            trump_filter,
+            org_search,
+            state_filter,
+            any_outcomes_filter
+        )
+    st.download_button(
+        "Download CSV",
+        export_df.to_csv(index=False).encode('utf-8'),
+        "protest_data.csv",
+        "text/csv"
+    )
+
 # --- MAIN LAYOUT ---
 if show_definitions:
     st.markdown("""
@@ -549,18 +570,6 @@ else:
             )
             st.plotly_chart(fig_daily_participants, use_container_width=True)
 
-
-    # --- DOWNLOAD BUTTON ---
-    if download_choice == 'full':
-        export_df = df.copy()
-    else:
-        export_df = dff.copy()
-    st.download_button(
-        "Download CSV",
-        export_df.to_csv(index=False).encode('utf-8'),
-        "protest_data.csv",
-        "text/csv"
-    )
 
     # --- Data Table ---
     with st.expander("Show Filtered Data Table"):
