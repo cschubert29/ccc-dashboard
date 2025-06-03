@@ -8,6 +8,7 @@ import os
 import random
 import re
 import time
+import io
 
 file_path = "ccc-phase3-public.csv"
 US_POPULATION = 340_100_000
@@ -44,11 +45,19 @@ cache = Cache(app.server, config={
 if not os.path.exists('cache-directory'):
     os.makedirs('cache-directory')
 
+# --- DESIGN CONSTANTS ---
+FONT_FAMILY = "helvetica,Arial,sans-serif" 
+PRIMARY_BLUE = "#244CC4"
+PRIMARY_RED = "#AC3C3D"
+BG_LIGHT = "#F8F7F9"
+KPI_BG_BLUE = "#244CC4"
+KPI_BG_RED = "#AC3C3D"
+KPI_TEXT = "#fff"
+
 # Sidebar content as separate components
 filter_panel = html.Div([
-    html.H2("Filters", style={'marginBottom': '20px'}),
-
-    html.Label("Date Range"),
+    html.H2("Filters", style={'marginBottom': '20px', 'fontFamily': FONT_FAMILY, 'color': PRIMARY_BLUE}),
+    html.Label("Date Range", style={'fontFamily': FONT_FAMILY}),
     dcc.DatePickerRange(
         id='date-range',
         start_date=df['date'].min(),
@@ -56,8 +65,7 @@ filter_panel = html.Div([
         display_format='YYYY-MM-DD',
         style={'marginBottom': '20px', 'width': '100%'}
     ),
-
-    html.Label("Participant Size Filter"),
+    html.Label("Participant Size Filter", style={'fontFamily': FONT_FAMILY}),
     dcc.RadioItems(
         id='size-filter',
         options=[
@@ -66,27 +74,24 @@ filter_panel = html.Div([
             {'label': 'All events', 'value': 'all'}
         ],
         value='all',
-        labelStyle={'display': 'block'},
+        labelStyle={'display': 'block', 'marginBottom': '6px', 'fontFamily': FONT_FAMILY},
         style={'marginBottom': '20px'}
     ),
-
     dcc.Checklist(
         id='trump-filter',
         options=[{'label': 'Only anti-Trump events', 'value': 'trump'}],
         value=[],
-        style={'marginBottom': '20px'}
+        style={'marginBottom': '20px', 'fontFamily': FONT_FAMILY}
     ),
-
-    html.Label("Organization Search"),
+    html.Label("Organization Search", style={'fontFamily': FONT_FAMILY}),
     dcc.Input(
         id='org-search',
         type='text',
         placeholder="Type organizations, separated by commas",
-        style={'width': '100%', 'marginBottom': '5px'}
+        style={'width': '100%', 'marginBottom': '5px', 'borderRadius': '8px', 'border': '1px solid #ccc', 'padding': '8px', 'fontFamily': FONT_FAMILY}
     ),
     html.Div("↩ Separate multiple organizations with commas", style={'fontSize': '0.8em', 'color': '#666', 'marginBottom': '15px'}),
-
-    html.Label("State/Territory"),
+    html.Label("State/Territory", style={'fontFamily': FONT_FAMILY}),
     dcc.Dropdown(
         id='state-filter',
         options=[
@@ -94,13 +99,12 @@ filter_panel = html.Div([
             for s in sorted(df['state'].dropna().unique())
         ],
         value=[],
-        multi=True,  
+        multi=True,
         placeholder="Select state(s) or territory(ies)",
         clearable=True,
-        style={'marginBottom': '20px'}
+        style={'marginBottom': '20px', 'borderRadius': '8px', 'fontFamily': FONT_FAMILY}
     ),
-
-    html.Label("Event Outcomes"),
+    html.Label("Event Outcomes", style={'fontFamily': FONT_FAMILY}),
     dcc.Checklist(
         id='any-outcomes-filter',
         options=[
@@ -112,10 +116,9 @@ filter_panel = html.Div([
             {'label': 'Any Police Deaths', 'value': 'police_deaths_any'},
         ],
         value=[],
-        style={'marginBottom': '20px'}
+        style={'marginBottom': '20px', 'fontFamily': FONT_FAMILY}
     ),
-
-    html.Label("Download Data"),
+    html.Label("Download Data", style={'fontFamily': FONT_FAMILY}),
     dcc.Dropdown(
         id='download-choice',
         options=[
@@ -124,20 +127,38 @@ filter_panel = html.Div([
         ],
         value='filtered',
         clearable=False,
-        style={'marginBottom': '10px'}
+        style={'marginBottom': '10px', 'borderRadius': '8px', 'fontFamily': FONT_FAMILY}
     ),
-    html.Button("Download CSV", id="download-btn", style={'marginBottom': '20px', 'width': '100%'}),
+    html.Button(
+        "Download CSV",
+        id="download-btn",
+        style={
+            'marginBottom': '20px',
+            'width': '100%',
+            'backgroundColor': PRIMARY_BLUE,
+            'color': '#fff',
+            'fontWeight': 'bold',
+            'fontFamily': FONT_FAMILY,
+            'borderRadius': '12px',
+            'border': 'none',
+            'fontSize': '1.1em',
+            'padding': '12px 0',
+            'boxShadow': '0 2px 8px rgba(36,76,196,0.08)',
+            'transition': 'background 0.2s'
+        }
+    ),
     dcc.Download(id="download-data"),
 ], id='filter-panel', style={
     'padding': '24px',
-    'backgroundColor': '#f9f9f9',
-    'borderRadius': '12px',
-    'boxShadow': '0 2px 8px rgba(0,0,0,0.05)',
-    'marginBottom': '24px'
+    'backgroundColor': BG_LIGHT,
+    'borderRadius': '16px',
+    'boxShadow': '0 2px 8px rgba(0,0,0,0.07)',
+    'marginBottom': '24px',
+    'fontFamily': FONT_FAMILY
 })
 
 definitions_panel = html.Div([
-    html.H3("Data Definitions & Sources", style={'marginTop': '20px'}),
+    html.H3("Data Definitions & Sources", style={'marginTop': '20px', 'fontFamily': FONT_FAMILY, 'color': PRIMARY_BLUE}),
     html.Div([
         html.P([
             html.B("Data Source: "),
@@ -193,10 +214,11 @@ definitions_panel = html.Div([
     ], style={'fontSize': '0.95em', 'color': '#333', 'marginTop': '10px'})
 ], id='definitions-panel', style={
     'padding': '24px',
-    'backgroundColor': '#f9f9f9',
+    'backgroundColor': BG_LIGHT,
     'borderRadius': '12px',
     'boxShadow': '0 2px 8px rgba(0,0,0,0.05)',
-    'marginBottom': '24px'
+    'marginBottom': '24px',
+    'fontFamily': FONT_FAMILY
 })
 
 # Sidebar with toggle button and content container
@@ -205,14 +227,14 @@ sidebar = html.Div([
         id='toggle-sidebar',
         n_clicks=0,
         children="Show Data Definitions & Sources",
-        style={'marginBottom': '18px', 'width': '100%', 'fontWeight': 'bold'}
+        style={'marginBottom': '18px', 'width': '100%', 'fontWeight': 'bold', 'fontFamily': FONT_FAMILY, 'backgroundColor': PRIMARY_BLUE, 'color': '#fff'}
     ),
     html.Div(id='sidebar-content')
 ], style={
-    'width': '300px',
+    'width': '320px',
     'padding': '32px 16px 48px 16px',
     'boxSizing': 'border-box',
-    'backgroundColor': '#f9f9f9',
+    'backgroundColor': BG_LIGHT,
     'borderRight': '1px solid #ccc',
     'flexShrink': '0',
     'flexGrow': '1',
@@ -220,7 +242,8 @@ sidebar = html.Div([
     'boxShadow': '2px 0 8px rgba(0,0,0,0.07)',
     'borderRadius': '0 12px 12px 0',
     'position': 'relative',
-    'zIndex': 1050
+    'zIndex': 1050,
+    'fontFamily': FONT_FAMILY
 })
 
 dashboard_layout = html.Div([
@@ -229,67 +252,79 @@ dashboard_layout = html.Div([
         html.Div(id='no-data-message', style={'marginBottom': '24px'}),
         html.Div(id='kpi-cards', style={
             'display': 'flex',
-            'justifyContent': 'space-around',
-            'margin': '24px 0',
-            'gap': '16px'
+            'justifyContent': 'space-between',
+            'margin': '24px 0 24px 0',
+            'gap': '18px'
         }),
         html.Div([
             dcc.Graph(id='map-graph', style={
-                'height': '320px',
-                'marginBottom': '24px',
-                'borderRadius': '12px',
+                'height': '340px',
+                'marginBottom': '8px',
+                'borderRadius': '16px',
                 'backgroundColor': '#fff',
-                'boxShadow': '0 2px 8px rgba(0,0,0,0.05)'
+                'boxShadow': '0 2px 8px rgba(0,0,0,0.07)'
             }),
+            # Only show attribution ONCE, not inside the event details panel
             html.Div(
-                id='event-details-panel',
+                "Map tiles by Carto, data © OpenStreetMap contributors",
                 style={
-                    'margin': '0 0 24px 0',
-                    'padding': '16px',
+                    'fontSize': '0.95em',
+                    'color': '#888',
+                    'textAlign': 'right',
+                    'margin': '0 6px 10px 0',
+                    'fontFamily': FONT_FAMILY
+                }
+            ),
+            html.Div(id='event-details-panel',
+                style={
+                    'margin': '0 0 28px 0',
+                    'padding': '18px',
                     'backgroundColor': '#fff',
                     'borderRadius': '12px',
                     'boxShadow': '0 2px 8px rgba(0,0,0,0.05)',
                     'minHeight': '56px',
-                    'display': 'block'
+                    'display': 'block',
+                    'fontFamily': FONT_FAMILY
                 }
             ),
             dcc.Graph(id='momentum-graph', style={
-                'height': '250px',
-                'marginBottom': '24px',
-                'borderRadius': '12px',
+                'height': '260px',
+                'marginBottom': '28px',
+                'borderRadius': '16px',
                 'backgroundColor': '#fff',
-                'boxShadow': '0 2px 8px rgba(0,0,0,0.05)'
+                'boxShadow': '0 2px 8px rgba(0,0,0,0.07)'
             }),
             dcc.Graph(id='daily-graph', style={
-                'height': '250px',
-                'marginBottom': '24px',
-                'borderRadius': '12px',
+                'height': '260px',
+                'marginBottom': '28px',
+                'borderRadius': '16px',
                 'backgroundColor': '#fff',
-                'boxShadow': '0 2px 8px rgba(0,0,0,0.05)'
+                'boxShadow': '0 2px 8px rgba(0,0,0,0.07)'
             }),
             dcc.Graph(id='cumulative-graph', style={
-                'height': '250px',
-                'marginBottom': '24px',
-                'borderRadius': '12px',
+                'height': '260px',
+                'marginBottom': '28px',
+                'borderRadius': '16px',
                 'backgroundColor': '#fff',
-                'boxShadow': '0 2px 8px rgba(0,0,0,0.05)'
+                'boxShadow': '0 2px 8px rgba(0,0,0,0.07)'
             }),
             dcc.Graph(id='daily-participant-graph', style={
-                'height': '250px',
-                'marginBottom': '24px',
-                'borderRadius': '12px',
+                'height': '260px',
+                'marginBottom': '28px',
+                'borderRadius': '16px',
                 'backgroundColor': '#fff',
-                'boxShadow': '0 2px 8px rgba(0,0,0,0.05)'
+                'boxShadow': '0 2px 8px rgba(0,0,0,0.07)'
             })
         ], style={'minWidth': '0'})
     ], style={
-        'width': 'calc(100% - 300px)',
+        'width': 'calc(100% - 320px)',
         'padding': '32px',
         'boxSizing': 'border-box',
         'flexGrow': '1',
         'overflow': 'auto',
         'backgroundColor': '#f5f6fa',
-        'borderRadius': '12px 0 0 12px'
+        'borderRadius': '12px 0 0 12px',
+        'fontFamily': FONT_FAMILY
     })
 ], style={
     'display': 'flex',
@@ -297,7 +332,7 @@ dashboard_layout = html.Div([
     'flexWrap': 'nowrap',
     'height': '100vh',
     'overflow': 'hidden',
-    'fontFamily': 'Arial, sans-serif',
+    'fontFamily': FONT_FAMILY,
     'backgroundColor': '#e9ecef'
 })
 
@@ -305,7 +340,7 @@ app.layout = html.Div([
     dcc.Location(id='url', refresh=False),
     dcc.Store(id='filtered-data'),
     html.Div(id='page-content')
-], style={'height': '100vh', 'margin': 0, 'padding': 0})
+], style={'height': '100vh', 'margin': 0, 'padding': 0, 'fontFamily': FONT_FAMILY})
 
 def jitter_coords(df, lat_col='lat', lon_col='lon', jitter_amount=0.05):
     # Add random jitter to duplicate lat/lon pairs in a DataFrame
@@ -468,8 +503,6 @@ def update_all(
         any_outcomes_filter
     )
     t1 = time.time()
-    
-
     dff_map = dff.dropna(subset=['lat', 'lon'])
     dff_map = jitter_coords(dff_map, lat_col='lat', lon_col='lon', jitter_amount=0.03)
     agg_map = aggregate_events_for_map(dff_map)
@@ -484,35 +517,96 @@ def update_all(
     if total_events > 0 and 'size_mean' in dff.columns:
         percent_no_size = 100 * dff['size_mean'].isna().sum() / total_events
 
+    # Alternate KPI box colors: red, blue, red, blue, all white text
     kpis = [
         html.Div([
-            html.H3(f"{total_events:,}", style={'color': 'orange'}),
-            html.P("Total Events in Range")
-        ], style={'width': '24%', 'textAlign': 'center', 'padding': '10px', 'borderRadius': '12px', 'backgroundColor': '#f0f0f0'}),
-        html.Div([
-            html.H3(f"{percent_us_pop:.4f}%", style={'color': 'green'}),
-            html.P("Size Mean as % of US Population")
-        ], style={'width': '24%', 'textAlign': 'center', 'padding': '10px', 'borderRadius': '12px', 'backgroundColor': '#f0f0f0'}),
-        html.Div([
-            html.H3(f"{mean_size:,.0f}", style={'color': 'purple'}),
-            html.P("Mean Protest Size")
+            html.Div(f"{total_events:,}", style={
+                'fontSize': '2.2rem',
+                'fontWeight': '700',
+                'color': KPI_TEXT,
+                'letterSpacing': '0.05em',
+                'fontFamily': FONT_FAMILY
+            }),
+            html.Div("Total Events in Range", style={
+                'fontSize': '1.1rem',
+                'color': KPI_TEXT,
+                'letterSpacing': '0.08em',
+                'fontFamily': FONT_FAMILY
+            })
         ], style={
             'width': '24%',
             'textAlign': 'center',
-            'padding': '10px',
-            'borderRadius': '12px',
-            'backgroundColor': '#f0f0f0'
+            'padding': '18px 0 10px 0',
+            'borderRadius': '16px',
+            'backgroundColor': KPI_BG_RED,
+            'boxShadow': '0 2px 8px rgba(36,76,196,0.08)'
         }),
         html.Div([
-            html.H3(f"{percent_no_size:.1f}%", style={'color': 'red'}),
-            html.P("Events Missing Size")
+            html.Div(f"{percent_us_pop:.4f}%", style={
+                'fontSize': '2.2rem',
+                'fontWeight': '700',
+                'color': KPI_TEXT,
+                'letterSpacing': '0.05em',
+                'fontFamily': FONT_FAMILY
+            }),
+            html.Div("Size Mean as % of US Population", style={
+                'fontSize': '1.1rem',
+                'color': KPI_TEXT,
+                'letterSpacing': '0.08em',
+                'fontFamily': FONT_FAMILY
+            })
         ], style={
             'width': '24%',
             'textAlign': 'center',
-            'padding': '10px',
-            'borderRadius': '12px',
-            'backgroundColor': '#f0f0f0'
-        })
+            'padding': '18px 0 10px 0',
+            'borderRadius': '16px',
+            'backgroundColor': KPI_BG_BLUE,
+            'boxShadow': '0 2px 8px rgba(36,76,196,0.08)'
+        }),
+        html.Div([
+            html.Div(f"{mean_size:,.0f}", style={
+                'fontSize': '2.2rem',
+                'fontWeight': '700',
+                'color': KPI_TEXT,
+                'letterSpacing': '0.05em',
+                'fontFamily': FONT_FAMILY
+            }),
+            html.Div("Mean Protest Size", style={
+                'fontSize': '1.1rem',
+                'color': KPI_TEXT,
+                'letterSpacing': '0.08em',
+                'fontFamily': FONT_FAMILY
+            })
+        ], style={
+            'width': '24%',
+            'textAlign': 'center',
+            'padding': '18px 0 10px 0',
+            'borderRadius': '16px',
+            'backgroundColor': KPI_BG_RED,
+            'boxShadow': '0 2px 8px rgba(36,76,196,0.08)'
+        }),
+        html.Div([
+            html.Div(f"{percent_no_size:.1f}%", style={
+                'fontSize': '2.2rem',
+                'fontWeight': '700',
+                'color': KPI_TEXT,
+                'letterSpacing': '0.05em',
+                'fontFamily': FONT_FAMILY
+            }),
+            html.Div("Events Missing Size", style={
+                'fontSize': '1.1rem',
+                'color': KPI_TEXT,
+                'letterSpacing': '0.08em',
+                'fontFamily': FONT_FAMILY
+            })
+        ], style={
+            'width': '24%',
+            'textAlign': 'center',
+            'padding': '18px 0 10px 0',
+            'borderRadius': '16px',
+            'backgroundColor': KPI_BG_BLUE,
+            'boxShadow': '0 2px 8px rgba(36,76,196,0.08)'
+        }),
     ]
 
     # Defensive: Ensure 'lat' and 'lon' columns exist and are not all missing
@@ -537,7 +631,7 @@ def update_all(
     if not has_size.empty:
         max_size = has_size['size_mean'].max()
         sizeref = 2.0 * max_size / (50.0 ** 2) if max_size > 0 else 1
-        fig_map.add_trace(go.Scattermap(
+        fig_map.add_trace(go.Scattermapbox(
             lat=has_size['lat'],
             lon=has_size['lon'],
             mode='markers',
@@ -555,7 +649,7 @@ def update_all(
 
     # Plot locations without participant size (red, fixed size)
     if not no_size.empty:
-        fig_map.add_trace(go.Scattermap(
+        fig_map.add_trace(go.Scattermapbox(
             lat=no_size['lat'],
             lon=no_size['lon'],
             mode='markers',
@@ -706,7 +800,6 @@ def display_page(pathname):
      Input('filtered-data', 'data')]
 )
 def show_event_details(clickData, filtered_json):
-
     # Always show the sticky message if nothing is selected
     if not clickData or not filtered_json:
         return html.Div(
@@ -720,7 +813,7 @@ def show_event_details(clickData, filtered_json):
             }
         )
 
-    dff = pd.read_json(filtered_json, orient='split')
+    dff = pd.read_json(io.StringIO(filtered_json), orient='split')
     point = clickData['points'][0]
     location_label = point.get('text') or point.get('hovertext')
     if not location_label:
@@ -735,7 +828,7 @@ def show_event_details(clickData, filtered_json):
     if events.empty:
         return html.Div("No event details found for this marker.", style={'color': '#555', 'margin': '12px 0'})
 
-    # List all the details that seem important to someone
+    # Only show non-null/non-empty values in event details
     detail_fields = [
         ('Title', 'title'),
         ('Locality', 'locality'),
@@ -760,11 +853,11 @@ def show_event_details(clickData, filtered_json):
         event_detail = []
         for label, col in detail_fields:
             val = row.get(col, None)
-            # Format missing or NaN as "NA"
-            if pd.isnull(val) or val is None or (isinstance(val, float) and np.isnan(val)):
-                val = "NA"
+            # Only show if not null/empty/NaN
+            if pd.isnull(val) or val is None or (isinstance(val, float) and np.isnan(val)) or (isinstance(val, str) and not val.strip()):
+                continue
             # Format date
-            if col == 'date' and val != "NA":
+            if col == 'date':
                 try:
                     val = pd.to_datetime(val).strftime('%Y-%m-%d')
                 except Exception:
@@ -835,5 +928,5 @@ def toggle_sidebar_content(n_clicks):
         return definitions_panel
     return filter_panel
 
-# if __name__ == '__main__':
-#     app.run(debug=False)
+if __name__ == '__main__':
+    app.run(debug=True)
