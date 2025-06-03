@@ -121,29 +121,50 @@ def aggregate_events_for_map(dff_map):
     agg['text'] = agg['location_label']
     return agg
 
-def build_hover(row):
+def build_hover(row, dff):
+    """
+    For a given map row, list all events at that site with their own details.
+    Always show: Name (or 'No Name'), Date, Locality.
+    Only show other fields if not null/empty.
+    """
     def safe(val):
-        return "NA" if pd.isnull(val) else val
-    details = [
-        f"<b>{safe(row.get('location_label',''))}</b>",
-        f"Title: {safe(row.get('title',''))}",
-        f"Date: {safe(row.get('date',''))}",
-        f"Locality: {safe(row.get('locality',''))}",
-        f"Location: {safe(row.get('location',''))}",
-        f"Organizations: {safe(row.get('organizations',''))}",
-        f"Participants: {safe(row.get('size_mean','')):.0f}" if pd.notnull(row.get('size_mean','')) else "Participants: NA",
-        f"Notables: {safe(row.get('notables',''))}",
-        f"Targets: {safe(row.get('targets',''))}",
-        f"Claims Summary: {safe(row.get('claims_summary',''))}",
-        f"Participant Measures: {safe(row.get('participant_measures',''))}",
-        f"Police Measures: {safe(row.get('police_measures',''))}",
-        f"Participant Injuries: {safe(row.get('participant_injuries',''))}",
-        f"Police Injuries: {safe(row.get('police_injuries',''))}",
-        f"Arrests: {safe(row.get('arrests',''))}",
-        f"Property Damage: {safe(row.get('property_damage',''))}",
-        f"Notes: {safe(row.get('notes',''))}",
-    ]
-    return "<br>".join(details)
+        return "NA" if pd.isnull(val) or val == "" else val
+
+    site_label = row['location_label']
+    events = dff[dff['location_label'] == site_label]
+
+    event_blocks = []
+    for idx, (_, event) in enumerate(events.iterrows()):
+        block = ""
+        if idx > 0:
+            block += "<br>––––––––––––––––––<br>"
+        title = safe(event.get('title', 'No Name'))
+        date = safe(event.get('date', ''))
+        if isinstance(date, pd.Timestamp):
+            date = date.date()
+        locality = safe(event.get('locality', ''))
+        block += f"<b><span style='color:#244CC4'>{title}</span></b> <span style='color:#888'>({date})</span><br>"
+        block += f"<span style='color:#888;'>Locality:</span> {locality}<br>"
+        # Only show fields if not null
+        for field, label in [
+            ('size_mean', 'Size'),
+            ('targets', 'Targets'),
+            ('participant_measures', 'Participant Measures'),
+            ('police_measures', 'Police Measures'),
+            ('participant_injuries', 'Participant Injuries'),
+            ('police_injuries', 'Police Injuries'),
+            ('arrests', 'Arrests'),
+            ('property_damage', 'Property Damage'),
+            ('notes', 'Notes')
+        ]:
+            val = event.get(field, None)
+            if pd.notnull(val) and str(val).strip() != "":
+                if field == 'size_mean':
+                    val = f"{int(val):,}"
+                block += f"<span style='color:#888;'>{label}:</span> {safe(val)}<br>"
+        event_blocks.append(block)
+    details = "".join(event_blocks)
+    return details
 
 st.set_page_config(layout="wide", page_title="Protest Dashboard", page_icon="🗺️")
 
@@ -316,20 +337,48 @@ else:
     if total_events > 0 and 'size_mean' in dff.columns:
         percent_no_size = 100 * dff['size_mean'].isna().sum() / total_events
 
-    # --- KPIs with modern style ---
+    # --- KPIs with modern style in boxes ---
     kpi1, kpi2, kpi3, kpi4 = st.columns(4)
     with kpi1:
-        st.markdown(f"<div class='big-metric'>{total_events:,}</div>", unsafe_allow_html=True)
-        st.markdown("<div class='metric-label'>Total Events in Range</div>", unsafe_allow_html=True)
+        st.markdown(
+            """
+            <div style="background:#244CC4;border-radius:10px;padding:18px 0 10px 0;text-align:center;">
+                <div style='font-size:2.2rem;font-weight:700;color:#fff;letter-spacing:0.05em;'>{:,}</div>
+                <div style='font-size:1.1rem;color:#fff;letter-spacing:0.08em;'>Total Events in Range</div>
+            </div>
+            """.format(total_events),
+            unsafe_allow_html=True
+        )
     with kpi2:
-        st.markdown(f"<div class='big-metric'>{percent_us_pop:.4f}%</div>", unsafe_allow_html=True)
-        st.markdown("<div class='metric-label'>Size Mean as % of US Population</div>", unsafe_allow_html=True)
+        st.markdown(
+            """
+            <div style="background:#AC3C3D;border-radius:10px;padding:18px 0 10px 0;text-align:center;">
+                <div style='font-size:2.2rem;font-weight:700;color:#fff;letter-spacing:0.05em;'>{:.4f}%</div>
+                <div style='font-size:1.1rem;color:#fff;letter-spacing:0.08em;'>Size Mean as % of US Population</div>
+            </div>
+            """.format(percent_us_pop),
+            unsafe_allow_html=True
+        )
     with kpi3:
-        st.markdown(f"<div class='big-metric'>{mean_size:,.0f}</div>", unsafe_allow_html=True)
-        st.markdown("<div class='metric-label'>Mean Protest Size</div>", unsafe_allow_html=True)
+        st.markdown(
+            """
+            <div style="background:#244CC4;border-radius:10px;padding:18px 0 10px 0;text-align:center;">
+                <div style='font-size:2.2rem;font-weight:700;color:#fff;letter-spacing:0.05em;'>{:,.0f}</div>
+                <div style='font-size:1.1rem;color:#fff;letter-spacing:0.08em;'>Mean Protest Size</div>
+            </div>
+            """.format(mean_size),
+            unsafe_allow_html=True
+        )
     with kpi4:
-        st.markdown(f"<div class='big-metric'>{percent_no_size:.1f}%</div>", unsafe_allow_html=True)
-        st.markdown("<div class='metric-label'>Events Missing Size</div>", unsafe_allow_html=True)
+        st.markdown(
+            """
+            <div style="background:#AC3C3D;border-radius:10px;padding:18px 0 10px 0;text-align:center;">
+                <div style='font-size:2.2rem;font-weight:700;color:#fff;letter-spacing:0.05em;'>{:.1f}%</div>
+                <div style='font-size:1.1rem;color:#fff;letter-spacing:0.08em;'>Events Missing Size</div>
+            </div>
+            """.format(percent_no_size),
+            unsafe_allow_html=True
+        )
 
     # --- MAP with bold colors and light theme ---
     selected_location = None
@@ -348,14 +397,14 @@ else:
             sizeref = 1
         # Assign detailed hover to both groups
         if not has_size.empty:
-            has_size['detailed_hover'] = has_size.apply(build_hover, axis=1)
+            has_size['detailed_hover'] = has_size.apply(build_hover, axis=1, dff=dff)
             fig_map.add_trace(go.Scattermapbox(
                 lat=has_size['lat'],
                 lon=has_size['lon'],
                 mode='markers',
                 marker=dict(
                     size=has_size['size_mean'],
-                    color='#fbbf24',
+                    color='#244CC4',
                     opacity=0.85,
                     sizemode='area',
                     sizeref=sizeref,
@@ -366,7 +415,7 @@ else:
                 name="Has Size"
             ))
         if not no_size.empty:
-            no_size['detailed_hover'] = no_size.apply(build_hover, axis=1)
+            no_size['detailed_hover'] = no_size.apply(build_hover, axis=1, dff=dff)
             fig_map.add_trace(go.Scattermapbox(
                 lat=no_size['lat'],
                 lon=no_size['lon'],
