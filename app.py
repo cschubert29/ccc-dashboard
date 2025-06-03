@@ -10,7 +10,8 @@ import re
 import time
 import io
 
-file_path = "ccc-phase3-public.csv"
+# Data file path
+file_path = "ccc-phase3-public.csv"  # You can change this to your new classified CSV filename after uploading!! Leaving it on this one for now
 US_POPULATION = 340_100_000
 
 # Load data
@@ -77,6 +78,7 @@ filter_panel = html.Div([
         labelStyle={'display': 'block', 'marginBottom': '6px', 'fontFamily': FONT_FAMILY},
         style={'marginBottom': '20px'}
     ),
+    # @Punta - this is the section for the "Only anti-Trump events" filter. Remove or edit this checklist to change or remove that filter.
     dcc.Checklist(
         id='trump-filter',
         options=[{'label': 'Only anti-Trump events', 'value': 'trump'}],
@@ -343,7 +345,14 @@ app.layout = html.Div([
 ], style={'height': '100vh', 'margin': 0, 'padding': 0, 'fontFamily': FONT_FAMILY})
 
 def jitter_coords(df, lat_col='lat', lon_col='lon', jitter_amount=0.05):
-    # Add random jitter to duplicate lat/lon pairs in a DataFrame
+    """
+    Add random jitter to duplicate lat/lon pairs in a DataFrame.
+
+    @Punta - This function is used to visually separate events that have identical or nearly identical coordinates. The function 
+    finds all duplicate coordinate pairs, and for each duplicate (except the first so we at least have that center point), it adds 
+    a small random offset to both latitude and longitude. The amount of jitter can be controlled with the jitter_amount parameter.
+    Default is 0.05 degrees right now but I have changed it a few times to try to keep points relatively close/not in ridiculous places like water bodies.
+    """
     df = df.copy().reset_index(drop=True)
     coords = df[[lat_col, lon_col]].astype(str).agg('_'.join, axis=1)
     counts = coords.value_counts()
@@ -517,7 +526,7 @@ def update_all(
     if total_events > 0 and 'size_mean' in dff.columns:
         percent_no_size = 100 * dff['size_mean'].isna().sum() / total_events
 
-    # Alternate KPI box colors: red, blue, red, blue, all white text
+    # Alternate KPI box colors: red, blue, red, blue, all white text, trying to make it look nicer
     kpis = [
         html.Div([
             html.Div(f"{total_events:,}", style={
@@ -813,6 +822,12 @@ def show_event_details(clickData, filtered_json):
             }
         )
 
+    # @Punta - The event details panel matches the correct events to the map clicks using the 'location_label' field.
+    # When a user clicks a marker, Dash provides clickData, which contains the 'text' or 'hovertext' field for the clicked marker.
+    # This field is set to the 'location_label' for that marker.
+    # The filtered event DataFrame (dff) also has a 'location_label' column, created to uniquely identify each location.
+    # The callback then selects all rows from dff where 'location_label' matches the one from the clicked marker,
+    # ensuring that clicking a marker always shows the correct event(s) for that location.
     dff = pd.read_json(io.StringIO(filtered_json), orient='split')
     point = clickData['points'][0]
     location_label = point.get('text') or point.get('hovertext')
@@ -927,6 +942,6 @@ def toggle_sidebar_content(n_clicks):
     if n_clicks and n_clicks % 2 == 1:
         return definitions_panel
     return filter_panel
-
+# @ Punta - Uncomment the following 2 lines to run the app directly and test locally. Comment back out when deploying to production.
 # if __name__ == '__main__':
 #     app.run(debug=True)
