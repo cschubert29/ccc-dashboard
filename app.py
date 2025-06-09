@@ -283,19 +283,63 @@ sidebar = html.Div([
 dashboard_layout = html.Div([
     sidebar,
     html.Div([
-        html.Div(
-            "Anti-Trump Protests in 2025",
-            style={
-                'fontFamily': FONT_FAMILY,
-                'fontWeight': 'bold',
-                'fontSize': '2.3rem',
-                'color': PRIMARY_BLUE,
-                'margin': '0 0 24px 0',
-                'padding': '0',
-                'letterSpacing': '0.01em',
-                'textAlign': 'left'
-            }
-        ),
+        # Title row with small KPIs to the right
+        html.Div([
+            html.Div(
+                "Anti-Trump Protests in 2025",
+                style={
+                    'fontFamily': FONT_FAMILY,
+                    'fontWeight': 'bold',
+                    'fontSize': '2.3rem',
+                    'color': PRIMARY_BLUE,
+                    'letterSpacing': '0.01em',
+                    'textAlign': 'left',
+                    'flex': '1 1 auto',
+                    'minWidth': 0,
+                    'whiteSpace': 'nowrap',
+                    'overflow': 'hidden',
+                    'textOverflow': 'ellipsis'
+                }
+            ),
+            html.Div([
+                html.Div(
+                    id='largest-event-kpi',
+                    style={
+                        'minWidth': '90px',
+                        'textAlign': 'center',
+                        'padding': '8px 10px 6px 10px',
+                        'borderRadius': '10px',
+                        'backgroundColor': PRIMARY_BLUE,
+                        'boxShadow': '0 2px 8px rgba(36,76,196,0.08)',
+                        'marginRight': '10px',
+                        'color': PRIMARY_WHITE  # Ensure text color is white
+                    }
+                ),
+                html.Div(
+                    id='largest-day-kpi',
+                    style={
+                        'minWidth': '90px',
+                        'textAlign': 'center',
+                        'padding': '8px 10px 6px 10px',
+                        'borderRadius': '10px',
+                        'backgroundColor': PRIMARY_RED,
+                        'boxShadow': '0 2px 8px rgba(36,76,196,0.08)',
+                        'color': PRIMARY_WHITE  # Ensure text color is white
+                    }
+                ),
+            ], style={
+                'display': 'flex',
+                'flexDirection': 'row',
+                'alignItems': 'center',
+                'marginLeft': '18px'
+            }),
+        ], style={
+            'display': 'flex',
+            'flexDirection': 'row',
+            'alignItems': 'center',
+            'justifyContent': 'space-between',
+            'margin': '0 0 24px 0'
+        }),
         html.Div(id='no-data-message', style={'marginBottom': '24px'}),
         html.Div(id='kpi-cards', style={
             'display': 'flex',
@@ -593,20 +637,26 @@ def aggregate_events_for_map(dff_map):
     return agg
 
 @app.callback(
-    [Output('map-graph', 'figure'),
-     Output('momentum-graph', 'figure'),
-     Output('daily-graph', 'figure'),
-     Output('kpi-cards', 'children'),
-     Output('filtered-data', 'data'),
-     Output('cumulative-graph', 'figure'),
-     Output('daily-participant-graph', 'figure'),
-     Output('no-data-message', 'children')],
-    [Input('date-range', 'start_date'),
-     Input('date-range', 'end_date'),
-     Input('size-filter', 'value'),
-     Input('org-search', 'value'),
-     Input('state-filter', 'value'),
-     Input('any-outcomes-filter', 'value')]
+    [
+        Output('map-graph', 'figure'),
+        Output('momentum-graph', 'figure'),
+        Output('daily-graph', 'figure'),
+        Output('kpi-cards', 'children'),
+        Output('filtered-data', 'data'),
+        Output('cumulative-graph', 'figure'),
+        Output('daily-participant-graph', 'figure'),
+        Output('no-data-message', 'children'),
+        Output('largest-event-kpi', 'children'),   # NEW
+        Output('largest-day-kpi', 'children'),     # NEW
+    ],
+    [
+        Input('date-range', 'start_date'),
+        Input('date-range', 'end_date'),
+        Input('size-filter', 'value'),
+        Input('org-search', 'value'),
+        Input('state-filter', 'value'),
+        Input('any-outcomes-filter', 'value')
+    ]
 )
 def update_all(
     start_date, end_date, size_filter, org_search, state_filter,
@@ -723,56 +773,14 @@ def update_all(
             'backgroundColor': PRIMARY_BLUE,
             'boxShadow': '0 2px 8px rgba(36,76,196,0.08)'
         }),
-        # Half-size KPIs for Largest Event and Largest Day
-        html.Div([
-            html.Div(f"{largest_event:,.0f} Participants", style={
-                'fontSize': '1.8rem',
-                'fontWeight': '700',
-                'color': PRIMARY_WHITE,
-                'letterSpacing': '0.05em',
-                'fontFamily': FONT_FAMILY
-            }),
-            html.Div("Largest Event", style={
-                'fontSize': '1rem',
-                'color': PRIMARY_WHITE,
-                'letterSpacing': '0.08em',
-                'fontFamily': FONT_FAMILY
-            })
-        ], style={
-            'width': '12%',
-            'textAlign': 'center',
-            'padding': '12px 12px 8px 12px',
-            'borderRadius': '12px',
-            'backgroundColor': PRIMARY_BLUE,
-            'boxShadow': '0 2px 8px rgba(36,76,196,0.08)'
-        }),
-        html.Div([
-            html.Div(f"{largest_day:,.0f} Participants", style={
-                'fontSize': '1.8rem',
-                'fontWeight': '700',
-                'color': PRIMARY_WHITE,
-                'letterSpacing': '0.05em',
-                'fontFamily': FONT_FAMILY
-            }),
-            html.Div("Largest Day", style={
-                'fontSize': '1rem',
-                'color': PRIMARY_WHITE,
-                'letterSpacing': '0.08em',
-                'fontFamily': FONT_FAMILY
-            })
-        ], style={
-            'width': '12%',
-            'textAlign': 'center',
-            'padding': '12px 12px 8px 12px',
-            'borderRadius': '12px',
-            'backgroundColor': PRIMARY_RED,
-            'boxShadow': '0 2px 8px rgba(36,76,196,0.08)'
-        }),
     ]
 
     # Defensive: Ensure 'lat' and 'lon' columns exist and are not all missing
     if 'lat' not in dff.columns or 'lon' not in dff.columns or dff['lat'].isnull().all() or dff['lon'].isnull().all():
         empty_fig = go.Figure()
+        # Define default values for largest_event_kpi and largest_day_kpi
+        largest_event_kpi = []
+        largest_day_kpi = []
         return (
             empty_fig, empty_fig, empty_fig, kpis,
             dff.to_json(date_format='iso', orient='split'),
@@ -780,7 +788,8 @@ def update_all(
             html.Div(
                 "No events with valid location data for the selected filters.",
                 style={'color': 'red', 'fontWeight': 'bold', 'fontSize': '1.2em', 'margin': '20px 0'}
-            )
+            ),
+            largest_event_kpi, largest_day_kpi
         )
 
     agg_map = aggregate_events_for_map(dff)
@@ -956,7 +965,43 @@ def update_all(
         'participant_injuries', 'police_injuries', 'arrests', 'property_damage', 'notes'
     ]
     dff_store = dff[store_cols].copy() if all(col in dff.columns for col in store_cols) else dff.copy()
-    return fig_map, fig_momentum, fig_daily, kpis, dff_store.to_json(date_format='iso', orient='split'), fig_cumulative, fig_daily_participants, None
+
+    # Build the small KPI boxes
+    largest_event_kpi = [
+        html.Div(f"{largest_event:,.0f}", style={
+            'fontSize': '1.2rem',
+            'fontWeight': '700',
+            'color': PRIMARY_WHITE,
+            'fontFamily': FONT_FAMILY,
+            'letterSpacing': '0.05em'
+        }),
+        html.Div("Largest Event", style={
+            'fontSize': '0.95rem',
+            'color': PRIMARY_WHITE,
+            'fontFamily': FONT_FAMILY,
+            'letterSpacing': '0.08em'
+        })
+    ]
+    largest_day_kpi = [
+        html.Div(f"{largest_day:,.0f}", style={
+            'fontSize': '1.2rem',
+            'fontWeight': '700',
+            'color': PRIMARY_WHITE,
+            'fontFamily': FONT_FAMILY,
+            'letterSpacing': '0.05em'
+        }),
+        html.Div("Largest Day", style={
+            'fontSize': '0.95rem',
+            'color': PRIMARY_WHITE,
+            'fontFamily': FONT_FAMILY,
+            'letterSpacing': '0.08em'
+        })
+    ]
+    return (
+        fig_map, fig_momentum, fig_daily, kpis, dff_store.to_json(date_format='iso', orient='split'),
+        fig_cumulative, fig_daily_participants, None,
+        largest_event_kpi, largest_day_kpi
+    )
 
 @app.callback(
     Output('page-content', 'children'),
@@ -1095,5 +1140,5 @@ def toggle_sidebar_content(n_clicks):
         return definitions_panel
     return filter_panel
 # Uncomment the following 2 lines to run the app directly and test locally. Comment back out when deploying to production.
-# if __name__ == '__main__':
-#     app.run(debug=True)
+if __name__ == '__main__':
+    app.run(debug=True)
