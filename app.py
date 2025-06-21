@@ -289,7 +289,8 @@ def get_sidebar(is_open):
         'fontFamily': FONT_FAMILY,
         'transition': 'width 0.3s cubic-bezier(.4,2,.6,1), padding 0.3s cubic-bezier(.4,2,.6,1)'
     }
-    toggle_icon = "⮜" if is_open else "⮞"
+    
+    toggle_icon = "❮" if is_open else "❯"
     toggle_tab = html.Div(
         toggle_icon,
         id='sidebar-toggle-tab',
@@ -438,10 +439,42 @@ app.layout = html.Div([
                     html.Div(id='event-details-panel')
                 ]),
                 dcc.Tab(label='Graphs', value='graphs', children=[
-                    dcc.Graph(id='momentum-graph'),
-                    dcc.Graph(id='daily-graph'),
-                    dcc.Graph(id='cumulative-graph'),
-                    dcc.Graph(id='daily-participant-graph')
+                    html.Div([
+                        html.Div("Momentum of Dissent", style={
+                            'fontWeight': 'bold',
+                            'fontSize': '1.1em',
+                            'marginBottom': '4px',
+                            'textAlign': 'center'
+                        }),
+                        dcc.Graph(id='momentum-graph', config={'displayModeBar': True})
+                    ]),
+                    html.Div([
+                        html.Div("Daily Event Count", style={
+                            'fontWeight': 'bold',
+                            'fontSize': '1.1em',
+                            'marginBottom': '4px',
+                            'textAlign': 'center'
+                        }),
+                        dcc.Graph(id='daily-graph', config={'displayModeBar': True})
+                    ]),
+                    html.Div([
+                        html.Div("Cumulative Total Events", style={
+                            'fontWeight': 'bold',
+                            'fontSize': '1.1em',
+                            'marginBottom': '4px',
+                            'textAlign': 'center'
+                        }),
+                        dcc.Graph(id='cumulative-graph', config={'displayModeBar': True})
+                    ]),
+                    html.Div([
+                        html.Div("Daily Participant Count", style={
+                            'fontWeight': 'bold',
+                            'fontSize': '1.1em',
+                            'marginBottom': '4px',
+                            'textAlign': 'center'
+                        }),
+                        dcc.Graph(id='daily-participant-graph', config={'displayModeBar': True})
+                    ])
                 ]),
                 dcc.Tab(label='Table', value='table', children=[
                     dash_table.DataTable(
@@ -514,7 +547,8 @@ def get_sidebar(is_open):
         'fontFamily': FONT_FAMILY,
         'transition': 'width 0.3s cubic-bezier(.4,2,.6,1), padding 0.3s cubic-bezier(.4,2,.6,1)'
     }
-    toggle_icon = "⮜" if is_open else "⮞"
+    # Use more compatible arrows for mobile
+    toggle_icon = "❮" if is_open else "❯"
     toggle_tab = html.Div(
         toggle_icon,
         id='sidebar-toggle-tab',
@@ -958,26 +992,41 @@ def update_all(
     dff_momentum = dff_momentum.reset_index()
 
     fig_momentum = go.Figure()
-    fig_momentum.add_trace(go.Scatter(x=dff_momentum['date'], y=dff_momentum['momentum'], mode='lines', name='Momentum'))
-    fig_momentum.add_trace(go.Scatter(x=dff_momentum['date'], y=dff_momentum['alt_momentum'], mode='lines', name='7-Day Rolling'))
-    fig_momentum.update_layout(title="Momentum of Dissent", height=270, margin=standard_margin)
+    fig_momentum.add_trace(go.Scatter(
+        x=dff_momentum['date'], y=dff_momentum['momentum'], mode='lines', name='Momentum'
+    ))
+    fig_momentum.add_trace(go.Scatter(
+        x=dff_momentum['date'], y=dff_momentum['alt_momentum'], mode='lines', name='7-Day Rolling'
+    ))
+    # Add trendline (linear regression)
+    z = np.polyfit(
+        pd.to_numeric(dff_momentum['date']), dff_momentum['momentum'], 1
+    ) if len(dff_momentum) > 1 else [0, 0]
+    p = np.poly1d(z)
+    fig_momentum.add_trace(go.Scatter(
+        x=dff_momentum['date'],
+        y=p(pd.to_numeric(dff_momentum['date'])),
+        mode='lines',
+        name='Trendline',
+        line=dict(dash='dash', color='gray')
+    ))
+    fig_momentum.update_layout(height=270, margin=standard_margin)
 
     # Daily event count
     dff_daily = dff.set_index('date').resample('D').size().reset_index(name='count')
-    fig_daily = px.bar(dff_daily, x='date', y='count', title="Daily Event Count", height=270, template="plotly_white")
+    fig_daily = px.bar(dff_daily, x='date', y='count', height=270, template="plotly_white")
     fig_daily.update_layout(margin=standard_margin)
 
     # Cumulative total events
     dff_cum = dff.set_index('date').resample('D').size().reset_index(name='count')
     dff_cum['cumulative'] = dff_cum['count'].cumsum()
-    fig_cumulative = px.line(dff_cum, x='date', y='cumulative', title="Cumulative Total Events", height=250, template="plotly_white")
+    fig_cumulative = px.line(dff_cum, x='date', y='cumulative', height=250, template="plotly_white")
     fig_cumulative.update_layout(margin=standard_margin)
 
     # Daily participant count
     dff_participants = dff.set_index('date').resample('D')['size_mean'].sum().reset_index(name='participants')
     fig_daily_participant_graph = px.bar(
-        dff_participants, x='date', y='participants',
-        title="Daily Participant Count", height=250, template="plotly_white"
+        dff_participants, x='date', y='participants', height=250, template="plotly_white"
     )
     fig_daily_participant_graph.update_layout(margin=standard_margin)
 
