@@ -2,38 +2,44 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from dash import Dash, dcc, html, Input, Output, State, ctx, no_update, dash_table
+from dash import Dash, dcc, html, Input, Output, State, no_update, dash_table
 from flask_caching import Cache
 import os
 import random
 import re
-import time
 import io
 
 # Data file path
 file_path = "ccc_anti_trump.csv"  
 US_POPULATION = 340_100_000
 
-# Load data
-df = pd.read_csv(file_path, encoding='latin1', low_memory=False)
-df['date'] = pd.to_datetime(df['date'], errors='coerce')
-df['size_mean'] = pd.to_numeric(df['size_mean'], errors='coerce')
-df['participants_numeric'] = df['size_mean']
-df['targets'] = df['targets'].astype(str).str.lower()
-df['organizations'] = df['organizations'].astype(str).str.lower()
-df['state'] = df['state'].astype('category')
-df['targets'] = df['targets'].astype('category')
-df['organizations'] = df['organizations'].astype('category')
-if 'trump_stance' in df.columns:
-    df['trump_stance'] = df['trump_stance'].astype(str).str.lower()
+# Check if a preprocessed file exists
+processed_file = "processed_data.parquet"
+if os.path.exists(processed_file):
+    df = pd.read_parquet(processed_file)
+else:
+    # Load data
+    df = pd.read_csv(file_path, encoding='latin1', low_memory=False)
+    df['date'] = pd.to_datetime(df['date'], errors='coerce')
+    df['size_mean'] = pd.to_numeric(df['size_mean'], errors='coerce')
+    df['participants_numeric'] = df['size_mean']
+    df['targets'] = df['targets'].astype(str).str.lower()
+    df['organizations'] = df['organizations'].astype(str).str.lower()
+    df['state'] = df['state'].astype('category')
+    df['targets'] = df['targets'].astype('category')
+    df['organizations'] = df['organizations'].astype('category')
+    if 'trump_stance' in df.columns:
+        df['trump_stance'] = df['trump_stance'].astype(str).str.lower()
 
-# Ensure numeric columns are actually numeric for filtering
-for col in [
-    'participant_injuries', 'police_injuries', 'arrests',
-    'participant_deaths', 'police_deaths'
-]:
-    if col in df.columns:
-        df[col] = pd.to_numeric(df[col], errors='coerce')
+    # Ensure numeric columns are actually numeric for filtering
+    for col in [
+        'participant_injuries', 'police_injuries', 'arrests',
+        'participant_deaths', 'police_deaths'
+    ]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+
+    df.to_parquet(processed_file)  # Save the processed DataFrame
 
 app = Dash(__name__, suppress_callback_exceptions=True)
 server = app.server
@@ -75,7 +81,7 @@ filter_panel = html.Div([
         style={'marginBottom': '4px', 'width': '100%'}
     ),
     html.Div(
-        "Click the date values to select dates to filter on.",
+        "Click the date values to select dates to filter on. Note data is on a monthly release schedule, so recent events may not appear until the next update.",
         style={
             'fontSize': '0.8em',
             'color': PRIMARY_BLUE,
@@ -143,7 +149,7 @@ filter_panel = html.Div([
         style={'marginBottom': '10px', 'borderRadius': '8px', 'fontFamily': FONT_FAMILY}
     ),
     html.Button(
-        "Download CSV",
+        "Download Dataset",
         id="download-btn",
         style={
             'marginBottom': '20px',
@@ -157,10 +163,31 @@ filter_panel = html.Div([
             'fontSize': '1.1em',
             'padding': '12px 0',
             'boxShadow': '0 2px 8px rgba(36,76,196,0.08)',
-            'transition': 'background 0.2s'
-        }
+            'transition': 'all 0.2s ease-in-out',
+            'cursor': 'pointer'
+        },
+        className="hover-button"
     ),
     dcc.Download(id="download-data"),
+    html.Div([
+        html.A(
+            "Is your data/event missing? Click here to learn how to fix it!",
+            href="https://bit.ly/m/WeCount",
+            target="_blank",
+            style={
+                'display': 'inline-block',
+                'padding': '12px 24px',
+                'backgroundColor': PRIMARY_BLUE,
+                'color': PRIMARY_WHITE,
+                'fontWeight': 'bold',
+                'textDecoration': 'none',
+                'borderRadius': '8px',
+                'boxShadow': '0 2px 8px rgba(36,76,196,0.08)',
+                'marginTop': '20px',
+                'textAlign': 'center'
+            }
+        )
+    ], style={'textAlign': 'center', 'marginBottom': '20px'}),
 ], id='filter-panel', style={
     'padding': '24px',
     'backgroundColor': PRIMARY_WHITE,
@@ -193,11 +220,12 @@ definitions_panel = html.Div([
             ]),
             html.Li([
                 html.B("Anti-Trump events: "),
-                "This dashboard uses a dataset filtered to include only anti-Trump events."
+                "This dashboard uses a dataset filtered to include only anti-Trump events. Events that may be against him but do not mention him explicitly may not be included here."
             ]),
             html.Li([
                 html.B("Participant Size: "),
-                "The 'size_mean' field is an estimate of crowd size, as reported or inferred. Some events may have missing or uncertain size estimates."
+                "The 'size_mean' field is an average of the upper and lower range estimates of crowd size, as reported. "
+                "This provides a standardized estimate of participant size for each event. Some events may have missing or uncertain size estimates."
             ]),
             html.Li([
                 html.B("Organizations: "),
@@ -240,14 +268,23 @@ definitions_panel = html.Div([
     'fontFamily': FONT_FAMILY
 })
 
-# Sidebar with toggle button and content container
+# Sidebar with content container and toggle button for definitions
 sidebar = html.Div([
+    # Content container for the filter panel or definitions panel
+    html.Div(id='sidebar-content', children=[
+        filter_panel
+    ], style={
+        'display': 'block',
+        'width': '100%',
+        'transition': 'all 0.3s ease-in-out'
+    }),
+    # Bottom button to toggle between filters and definitions
     html.Button(
-        id='toggle-sidebar',
+        id='toggle-definitions',
         n_clicks=0,
         children="Show Data Definitions & Sources",
         style={
-            'marginBottom': '8px',
+            'marginTop': 'auto',
             'width': '100%',
             'fontWeight': '600',
             'fontFamily': FONT_FAMILY,
@@ -258,17 +295,18 @@ sidebar = html.Div([
             'fontSize': '1.08em',
             'padding': '12px 0',
             'boxShadow': '0 2px 8px rgba(36,76,196,0.06)',
-            'transition': 'all 0.2s',
-            'cursor': 'pointer'
+            'cursor': 'pointer',
+            'transition': 'all 0.2s ease-in-out',
+            'position': 'relative',
+            'zIndex': 1100
         },
-      
-    ),
-    html.Div(id='sidebar-content')
-], style={
+        className="hover-button"
+    )
+], id='sidebar', style={
     'width': '320px',
     'padding': '18px 16px 48px 16px',
     'boxSizing': 'border-box',
-    'backgroundColor': PRIMARY_WHITE,
+    'background': 'linear-gradient(135deg, #f5f6fa, #e9ecef)',
     'borderRight': '1px solid #ccc',
     'flexShrink': '0',
     'flexGrow': '1',
@@ -282,179 +320,127 @@ sidebar = html.Div([
 
 dashboard_layout = html.Div([
     sidebar,
-    html.Div([
-        # Title row with small KPIs to the right
+    html.Div(id='main-content', children=[
+        html.Div(
+            "Anti-Trump Events - 2025",
+            style={
+                'fontFamily': FONT_FAMILY,
+                'fontWeight': 'bold',
+                'fontSize': '2.5rem',
+                'color': PRIMARY_BLUE,
+                'textAlign': 'center',
+                'marginBottom': '24px'
+            }
+        ),
+        dcc.Tabs(
+            id='dashboard-tabs',
+            value='map',
+            children=[
+                dcc.Tab(label='Map', value='map'),
+                dcc.Tab(label='Metrics', value='metrics'),
+                dcc.Tab(label='Graphs', value='graphs'),
+                dcc.Tab(label='Table', value='table')
+            ],
+            style={'marginBottom': '16px'}
+        ),
         html.Div([
-            html.Div(
-                "Anti-Trump Protests in 2025",
-                style={
-                    'fontFamily': FONT_FAMILY,
-                    'fontWeight': 'bold',
-                    'fontSize': '2.3rem',
-                    'color': PRIMARY_BLUE,
-                    'letterSpacing': '0.01em',
-                    'textAlign': 'left',
-                    'flex': '1 1 auto',
-                    'minWidth': 0,
-                    'whiteSpace': 'nowrap',
-                    'overflow': 'hidden',
-                    'textOverflow': 'ellipsis'
-                }
-            ),
             html.Div([
-                html.Div(
-                    id='largest-event-kpi',
-                    style={
-                        'minWidth': '90px',
-                        'textAlign': 'center',
-                        'padding': '8px 10px 6px 10px',
-                        'borderRadius': '10px',
-                        'backgroundColor': PRIMARY_BLUE,
-                        'boxShadow': '0 2px 8px rgba(36,76,196,0.08)',
-                        'marginRight': '10px',
-                        'color': PRIMARY_WHITE  # Ensure text color is white
-                    }
-                ),
-                html.Div(
-                    id='largest-day-kpi',
-                    style={
-                        'minWidth': '90px',
-                        'textAlign': 'center',
-                        'padding': '8px 10px 6px 10px',
-                        'borderRadius': '10px',
-                        'backgroundColor': PRIMARY_RED,
-                        'boxShadow': '0 2px 8px rgba(36,76,196,0.08)',
-                        'color': PRIMARY_WHITE  # Ensure text color is white
-                    }
-                ),
-            ], style={
-                'display': 'flex',
-                'flexDirection': 'row',
-                'alignItems': 'center',
-                'marginLeft': '18px'
-            }),
-        ], style={
-            'display': 'flex',
-            'flexDirection': 'row',
-            'alignItems': 'center',
-            'justifyContent': 'space-between',
-            'margin': '0 0 24px 0'
-        }),
-        html.Div(id='no-data-message', style={'marginBottom': '24px'}),
-        html.Div(id='kpi-cards', style={
-            'display': 'flex',
-            'justifyContent': 'space-between',
-            'margin': '0 0 24px 0',
-            'gap': '18px'
-        }),
-        html.Div([
-            html.Div(
-                "Click a map marker to view event details below.",
-                style={
-                    'fontSize': '1.05em',
-                    'color': PRIMARY_BLUE,
-                    'margin': '0 0 8px 0',
-                    'fontWeight': 'bold',
-                    'fontFamily': FONT_FAMILY
-                }
-            ),
-            html.Div(
-                dcc.Graph(id='map-graph', style={
-                    'height': '340px',
-                    'width': '100%',
+                dcc.Graph(id='map-graph'),
+                html.Div(id='event-details-panel'),
+                html.Div(id='no-data-message')
+            ], id='map-tab', style={'display': 'block'}),
+            html.Div([
+                html.Div(id='kpi-cards', style={
+                    'display': 'flex',
+                    'justifyContent': 'space-between',
+                    'gap': '12px',
+                    'marginBottom': '24px'
                 }),
-                style={
-                    'marginBottom': '28px',
-                    'borderRadius': '16px',
-                    'backgroundColor': '#fff',
-                    'boxShadow': '0 2px 8px rgba(0,0,0,0.07)',
-                    'padding': '0 18px',
-                    'width': '100%',
-                }
-            ),
-            html.Div(id='event-details-panel',
-                style={
-                    'margin': '0 0 28px 0',
-                    'padding': '18px 24px',  
-                    'backgroundColor': '#fff',
-                    'borderRadius': '12px',
-                    'boxShadow': '0 2px 8px rgba(0,0,0,0.05)',
-                    'minHeight': '56px',
-                    'display': 'block',
-                    'fontFamily': FONT_FAMILY
-                }
-            ),
-            html.Div(
-                dcc.Graph(
-                    id='momentum-graph',
-                    style={'height': '260px', 'width': '100%'},
-                    config={
-                        'displayModeBar': True,
-                        'displaylogo': False,
-                        'modeBarButtonsToRemove': ['sendDataToCloud'],
-                        'responsive': True
-                    }
-                ),
-                style={
-                    'marginTop': '16px',
-                    'marginBottom': '16px',
-                    'borderRadius': '24px',
-                    'backgroundColor': '#fff',
-                    'boxShadow': '0 4px 24px rgba(36,76,196,0.10)',
-                    'width': '100%',
-                    'boxSizing': 'border-box',
-                    'padding': '18px 18px 10px 18px',
-                }
-            ),
-            html.Div(
-                dcc.Graph(
-                    id='daily-graph',
-                    style={'height': '260px', 'width': '100%'}
-                ),
-                style={
-                    'marginTop': '16px',
-                    'marginBottom': '16px',
-                    'borderRadius': '24px',
-                    'backgroundColor': '#fff',
-                    'boxShadow': '0 4px 24px rgba(36,76,196,0.10)',
-                    'width': '100%',
-                    'boxSizing': 'border-box',
-                    'padding': '18px 18px 10px 18px',
-                }
-            ),
-            html.Div(
-                dcc.Graph(
-                    id='cumulative-graph',
-                    style={'height': '260px', 'width': '100%'}
-                ),
-                style={
-                    'marginTop': '16px',
-                    'marginBottom': '16px',
-                    'borderRadius': '24px',
-                    'backgroundColor': '#fff',
-                    'boxShadow': '0 4px 24px rgba(36,76,196,0.10)',
-                    'width': '100%',
-                    'boxSizing': 'border-box',
-                    'padding': '18px 18px 10px 18px',
-                }
-            ),
-            html.Div(
-                dcc.Graph(
-                    id='daily-participant-graph',
-                    style={'height': '260px', 'width': '100%'}
-                ),
-                style={
-                    'marginTop': '16px',
-                    'marginBottom': '16px',
-                    'borderRadius': '24px',
-                    'backgroundColor': '#fff',
-                    'boxShadow': '0 4px 24px rgba(36,76,196,0.10)',
-                    'width': '100%',
-                    'boxSizing': 'border-box',
-                    'padding': '18px 18px 10px 18px',
-                }
+                html.Div([
+                    html.Div(id='largest-event-kpi', style={
+                        'flex': '1',
+                        'textAlign': 'center',
+                        'padding': '12px',
+                        'borderRadius': '12px',
+                        'backgroundColor': PRIMARY_BLUE,
+                        'color': PRIMARY_WHITE,
+                        'fontWeight': 'bold',
+                        'boxShadow': '0 2px 8px rgba(36,76,196,0.08)',
+                        'margin': '0 6px'
+                    }),
+                    html.Div(id='largest-day-kpi', style={
+                        'flex': '1',
+                        'textAlign': 'center',
+                        'padding': '12px',
+                        'borderRadius': '12px',
+                        'backgroundColor': PRIMARY_RED,
+                        'color': PRIMARY_WHITE,
+                        'fontWeight': 'bold',
+                        'boxShadow': '0 2px 8px rgba(36,76,196,0.08)',
+                        'margin': '0 6px'
+                    })
+                ], style={
+                    'display': 'flex',
+                    'gap': '12px',
+                    'marginBottom': '24px'
+                }),
+                html.Div([
+                    html.Div(id='no-injuries-kpi', style={
+                        'flex': '1',
+                        'textAlign': 'center',
+                        'padding': '12px',
+                        'borderRadius': '12px',
+                        'backgroundColor': PRIMARY_BLUE,
+                        'color': PRIMARY_WHITE,
+                        'fontWeight': 'bold',
+                        'boxShadow': '0 2px 8px rgba(36,76,196,0.08)',
+                        'margin': '0 6px'
+                    }),
+                    html.Div(id='no-arrests-kpi', style={
+                        'flex': '1',
+                        'textAlign': 'center',
+                        'padding': '12px',
+                        'borderRadius': '12px',
+                        'backgroundColor': PRIMARY_BLUE,
+                        'color': PRIMARY_WHITE,
+                        'fontWeight': 'bold',
+                        'boxShadow': '0 2px 8px rgba(36,76,196,0.08)',
+                        'margin': '0 6px'
+                    }),
+                    html.Div(id='no-damage-kpi', style={
+                        'flex': '1',
+                        'textAlign': 'center',
+                        'padding': '12px',
+                        'borderRadius': '12px',
+                        'backgroundColor': PRIMARY_BLUE,
+                        'color': PRIMARY_WHITE,
+                        'fontWeight': 'bold',
+                        'boxShadow': '0 2px 8px rgba(36,76,196,0.08)',
+                        'margin': '0 6px'
+                    })
+                ], style={
+                    'display': 'flex',
+                    'gap': '12px'
+                })
+            ], id='metrics-tab', style={'display': 'none'}),
+            html.Div([
+                dcc.Graph(id='momentum-graph'),
+                dcc.Graph(id='daily-graph'),
+                dcc.Graph(id='cumulative-graph'),
+                dcc.Graph(id='daily-participant-graph')
+            ], id='graphs-tab', style={'display': 'none'}),
+        html.Div([
+            dash_table.DataTable(
+                id='filtered-table',
+                columns=[],  # Columns will be set dynamically in the callback
+                style_table={'overflowY': 'auto', 'maxHeight': '500px', 'overflowX': 'auto'},
+                style_cell={'textAlign': 'left', 'padding': '10px', 'fontFamily': FONT_FAMILY, 'fontSize': '14px'},
+                style_header={'fontWeight': 'bold', 'backgroundColor': PRIMARY_BLUE, 'color': PRIMARY_WHITE},
+                virtualization=True,
+                fixed_rows={'headers': True}
             )
-        ], style={'minWidth': '0'})
+        ], id='table-tab', style={'display': 'none'})
+        ])
     ], style={
         'width': 'calc(100% - 320px)',
         'padding': '32px',
@@ -463,7 +449,8 @@ dashboard_layout = html.Div([
         'overflow': 'auto',
         'backgroundColor': '#f5f6fa',
         'borderRadius': '12px 0 0 12px',
-        'fontFamily': FONT_FAMILY
+        'fontFamily': FONT_FAMILY,
+        'transition': 'width 0.3s ease-in-out'
     })
 ], style={
     'display': 'flex',
@@ -475,17 +462,33 @@ dashboard_layout = html.Div([
     'backgroundColor': '#e9ecef'
 })
 
+
+@app.callback(
+    [
+        Output('map-tab', 'style'),
+        Output('metrics-tab', 'style'),
+        Output('graphs-tab', 'style'),
+        Output('table-tab', 'style')  # New table tab
+    ],
+    Input('dashboard-tabs', 'value')
+)
+def update_tab_display(tab):
+    return [
+        {'display': 'block'} if tab == 'map' else {'display': 'none'},
+        {'display': 'block'} if tab == 'metrics' else {'display': 'none'},
+        {'display': 'block'} if tab == 'graphs' else {'display': 'none'},
+        {'display': 'block'} if tab == 'table' else {'display': 'none'}  # Handle table tab visibility
+    ]
+
 app.layout = html.Div([
     dcc.Location(id='url', refresh=False),
     dcc.Store(id='filtered-data'),
-    html.Div(id='page-content')
-], style={'height': '100vh', 'margin': 0, 'padding': 0, 'fontFamily': FONT_FAMILY})
+    dashboard_layout
+])
 
 def jitter_coords(df, lat_col='lat', lon_col='lon', jitter_amount=0.05):
     
     # Add random jitter to duplicate lat/lon pairs in a DataFrame.
-
-    
     df = df.copy().reset_index(drop=True)
     coords = df[[lat_col, lon_col]].astype(str).agg('_'.join, axis=1)
     counts = coords.value_counts()
@@ -501,8 +504,6 @@ def jitter_coords(df, lat_col='lat', lon_col='lon', jitter_amount=0.05):
             df.at[i, lon_col] += np.sin(angle) * radius
     return df
 
-def safe_numeric(series):
-    return pd.to_numeric(series, errors='coerce')
 
 # --- SPEED OPTIMIZATION SECTION ---
 
@@ -517,11 +518,10 @@ def filter_data(
     start_date, end_date, size_filter, org_search, state_filter,
     any_outcomes_filter
 ):
-    dff = df
-
+    dff = df.copy()
     mask = pd.Series(True, index=dff.index)
 
-    # Apply filters (all vectorized)
+    # Apply filters
     if start_date and end_date:
         mask &= (dff['date'] >= start_date) & (dff['date'] <= end_date)
     if size_filter == 'has':
@@ -529,54 +529,19 @@ def filter_data(
     elif size_filter == 'no':
         mask &= dff['size_mean'].isna()
     if org_search:
-        org_terms = [o.strip().lower() for o in org_search.split(',') if o.strip()]
-        if org_terms:
-            pattern = '|'.join([re.escape(org) for org in org_terms])
-            mask &= dff['organizations'].str.contains(pattern, na=False, regex=True)
+        pattern = '|'.join(map(re.escape, org_search.lower().split(',')))
+        mask &= dff['organizations'].str.contains(pattern, na=False, regex=True)
     if state_filter:
         mask &= dff['state'].isin(state_filter)
 
-    # Outcomes logic (all vectorized)
+    # Apply outcomes filters
     for outcome in any_outcomes_filter:
         if outcome == 'arrests_any':
-            mask &= dff['arrests'].notna() & (dff['arrests'].astype(str).str.lower() != 'unspecified') & (pd.to_numeric(dff['arrests'], errors='coerce').fillna(0) > 0)
+            mask &= dff['arrests'].notna() & (dff['arrests'] > 0)
         elif outcome == 'participant_injuries_any':
-            mask &= dff['participant_injuries'].notna() & (dff['participant_injuries'].astype(str).str.lower() != 'unspecified') & (pd.to_numeric(dff['participant_injuries'], errors='coerce').fillna(0) > 0)
-        elif outcome == 'police_injuries_any':
-            mask &= dff['police_injuries'].notna() & (pd.to_numeric(dff['police_injuries'], errors='coerce').fillna(0) > 0)
-        elif outcome == 'property_damage_any':
-            mask &= dff['property_damage'].notna() & (dff['property_damage'].astype(str).str.strip() != "")
-        elif outcome == 'participant_deaths_any':
-            mask &= dff['participant_deaths'].notna() & (pd.to_numeric(dff['participant_deaths'], errors='coerce').fillna(0) > 0)
-        elif outcome == 'police_deaths_any':
-            mask &= dff['police_deaths'].notna() & (pd.to_numeric(dff['police_deaths'], errors='coerce').fillna(0) > 0)
+            mask &= dff['participant_injuries'].notna() & (dff['participant_injuries'] > 0)
 
-    # Filter only once, then add columns as needed
-    dff = dff.loc[mask]
-
-    # Only add columns if missing (should not happen in production)
-    required_cols = ['lat', 'lon', 'date', 'size_mean', 'participants_numeric', 'title', 'organizations']
-    for col in required_cols:
-        if col not in dff.columns:
-            dff[col] = np.nan
-
-    # Add location_label (vectorized, not apply)
-    def best_location(row):
-        loc = str(row.get('location', '')).strip()
-        if loc and loc.lower() != 'nan':
-            return loc
-        loc2 = str(row.get('locality', '')).strip()
-        if loc2 and loc2.lower() != 'nan':
-            return loc2
-        state = row.get('state', 'Unknown')
-        date = row['date'].date() if pd.notnull(row.get('date')) else ''
-        return f"{state}, {date}"
-    # Use .apply only for this, as it's not easily vectorizable
-    dff = dff.copy()  # Only copy here if needed for new columns
-    dff['location_label'] = dff.apply(best_location, axis=1)
-
-    # Remove fallback logic (not needed for speed, but simplifies)
-    return dff
+    return dff[mask]
 
 @cache.memoize(timeout=120)
 def aggregate_events_for_map(dff_map):
@@ -601,9 +566,10 @@ def aggregate_events_for_map(dff_map):
     # Create event labels for hover text
     df_map['event_label'] = df_map.apply(
         lambda row: (
-            f"{row.get('title', 'Unknown') if pd.notnull(row.get('title')) and str(row.get('title')).strip().lower() != 'nan' and str(row.get('title')).strip() else 'Unknown'} "
-            f"({row['date'].date() if pd.notnull(row['date']) else 'Unknown'})<br>"
-            f"Org: {row.get('organizations', 'Unknown') if pd.notnull(row.get('organizations')) and str(row.get('organizations')).strip() and str(row.get('organizations')).strip().lower() != 'nan' else 'Unknown'}"
+            f"<b>{row.get('title', 'Unknown')}</b><br>"
+            f"Date: {row['date'].date() if pd.notnull(row['date']) else 'Unknown'}<br>"
+            f"Organizations: {row.get('organizations', 'Unknown')}<br>"
+            f"Participants: {row.get('size_mean', 'Unknown')}"
         ),
         axis=1
     )
@@ -645,11 +611,14 @@ def aggregate_events_for_map(dff_map):
         Output('filtered-data', 'data'),
         Output('cumulative-graph', 'figure'),
         Output('daily-participant-graph', 'figure'),
-        Output('no-data-message', 'children'),
-        Output('largest-event-kpi', 'children'),   # NEW
-        Output('largest-day-kpi', 'children'),     # NEW
+        Output('largest-event-kpi', 'children'),
+        Output('largest-day-kpi', 'children'),
+        Output('no-injuries-kpi', 'children'),
+        Output('no-arrests-kpi', 'children'),
+        Output('no-damage-kpi', 'children')
     ],
     [
+        Input('url', 'pathname'),
         Input('date-range', 'start_date'),
         Input('date-range', 'end_date'),
         Input('size-filter', 'value'),
@@ -659,15 +628,97 @@ def aggregate_events_for_map(dff_map):
     ]
 )
 def update_all(
-    start_date, end_date, size_filter, org_search, state_filter,
-    any_outcomes_filter
+    pathname, start_date=None, end_date=None, size_filter='all', org_search=None,
+    state_filter=None, any_outcomes_filter=None
 ):
-    t0 = time.time()
+    # Set default values if inputs are None
+    start_date = start_date or df['date'].min()
+    end_date = end_date or df['date'].max()
+    size_filter = size_filter or 'all'
+    org_search = org_search or ''
+    state_filter = state_filter or []
+    any_outcomes_filter = any_outcomes_filter or []
+
     dff = filter_data(
         start_date, end_date, size_filter, org_search, state_filter,
         any_outcomes_filter
     )
-    t1 = time.time()
+
+    # Handle empty dataset
+    if dff.empty:
+        empty_fig = go.Figure()
+        return (
+            empty_fig, empty_fig, empty_fig, [],
+            dff.to_json(date_format='iso', orient='split'),
+            empty_fig, empty_fig, [], [], [], [], []
+        )
+
+    # Calculate metrics
+    total_events = len(dff)
+    percent_no_injuries = 0
+    percent_no_arrests = 0
+    percent_no_damage = 0
+
+    if total_events > 0:
+        percent_no_injuries = 100 * (dff['participant_injuries'].isna().sum() / total_events)
+        percent_no_arrests = 100 * (dff['arrests'].isna().sum() / total_events)
+        percent_no_damage = 100 * (dff['property_damage'].isna().sum() / total_events)
+
+    # Build KPIs
+    no_injuries_kpi = [
+        html.Div([
+            "🩹 ",  # Injury icon
+            html.Span(f"{percent_no_injuries:.1f}%", style={
+                'fontSize': '1.2rem',
+                'fontWeight': '700',
+                'color': PRIMARY_WHITE,
+                'fontFamily': FONT_FAMILY,
+                'letterSpacing': '0.05em'
+            })
+        ], style={'display': 'flex', 'alignItems': 'center', 'justifyContent': 'center'}),
+        html.Div("% with No Injuries", style={
+            'fontSize': '0.95rem',
+            'color': PRIMARY_WHITE,
+            'fontFamily': FONT_FAMILY,
+            'letterSpacing': '0.08em'
+        })
+    ]
+    no_arrests_kpi = [
+        html.Div([
+            "🚔 ",  # Arrest icon
+            html.Span(f"{percent_no_arrests:.1f}%", style={
+                'fontSize': '1.2rem',
+                'fontWeight': '700',
+                'color': PRIMARY_WHITE,
+                'fontFamily': FONT_FAMILY,
+                'letterSpacing': '0.05em'
+            })
+        ], style={'display': 'flex', 'alignItems': 'center', 'justifyContent': 'center'}),
+        html.Div("% with No Arrests", style={
+            'fontSize': '0.95rem',
+            'color': PRIMARY_WHITE,
+            'fontFamily': FONT_FAMILY,
+            'letterSpacing': '0.08em'
+        })
+    ]
+    no_damage_kpi = [
+        html.Div([
+            "🏚️ ",  # Damage icon
+            html.Span(f"{percent_no_damage:.1f}%", style={
+                'fontSize': '1.2rem',
+                'fontWeight': '700',
+                'color': PRIMARY_WHITE,
+                'fontFamily': FONT_FAMILY,
+                'letterSpacing': '0.05em'
+            })
+        ], style={'display': 'flex', 'alignItems': 'center', 'justifyContent': 'center'}),
+        html.Div("% with No Property Damage", style={
+            'fontSize': '0.95rem',
+            'color': PRIMARY_WHITE,
+            'fontFamily': FONT_FAMILY,
+            'letterSpacing': '0.08em'
+        })
+    ]
 
     # Calculate metrics
     total_events = len(dff)
@@ -715,7 +766,7 @@ def update_all(
                 'letterSpacing': '0.05em',
                 'fontFamily': FONT_FAMILY
             }),
-            html.Div("Largest Daily Participant Count as % of US population:", style={
+            html.Div("Largest Daily Participant Count as % of US Population", style={
                 'fontSize': '1.1rem',
                 'color': PRIMARY_WHITE,
                 'letterSpacing': '0.08em',
@@ -815,7 +866,13 @@ def update_all(
                 sizemin=5
             ),
             text=has_size['text'],
-            hovertext=has_size['hover'],
+            hovertemplate=(
+                "<b>%{text}</b><br><br>"
+                "Events at this site: %{customdata[0]}<br>"
+                "Participants: %{customdata[1]}<br>"
+                "<extra></extra>" 
+            ),
+            customdata=has_size[['count', 'size_mean']].values,
             name="Has Size"
         ))
 
@@ -833,7 +890,12 @@ def update_all(
                 sizemin=5
             ),
             text=no_size['text'],
-            hovertext=no_size['hover'],
+            hovertemplate=(
+                "<b>%{text}</b><br><br>"
+                "Events at this site: %{customdata[0]}<br>"
+                "<extra></extra>"
+            ),
+            customdata=no_size[['count']].values,  # Pass additional data for hovertemplate
             name="Missing Size"
         ))
 
@@ -843,7 +905,7 @@ def update_all(
         mapbox_zoom=3,
         mapbox_center={"lat": 39.8283, "lon": -98.5795},
         margin=standard_margin,
-        height=320,
+        height=500,
         showlegend=True,
         legend=dict(
             orientation="h",
@@ -956,19 +1018,40 @@ def update_all(
                 template="plotly_white"
             )
             fig_daily_participants.update_layout(margin=standard_margin)
-    
-    # Only store necessary columns in dcc.Store
+    def best_location(row):
+        loc = str(row.get('location', 'Unknown')).strip()
+        if loc and loc.lower() != 'nan':
+            return loc
+        loc2 = str(row.get('locality', 'Unknown')).strip()
+        if loc2 and loc2.lower() != 'nan':
+            return loc2
+        state = row.get('state', 'Unknown')
+        date = row['date'].date() if pd.notnull(row.get('date')) else 'Unknown'
+        return f"{state}, {date}"
+
+    dff['location_label'] = dff.apply(best_location, axis=1)
     store_cols = [
-        'lat', 'lon', 'date', 'size_mean', 'participants_numeric', 'title',
-        'organizations', 'location_label', 'locality', 'location', 'notables',
-        'targets', 'claims_summary', 'participant_measures', 'police_measures',
-        'participant_injuries', 'police_injuries', 'arrests', 'property_damage', 'notes'
+        'date', 'locality', 'state', 'resolved_locality', 'resolved_state', 'resolved_county',
+        'fips_code', 'lat', 'lon', 'location', 'title', 'event_type', 'organizations',
+        'participants', 'notables', 'targets', 'claims_summary', 'claims_verbatim',
+        'issue_tags_summary', 'issue_tags_verbatim', 'issues', 'valence', 'conf',
+        'macroevent', 'online', 'size_text', 'size_low', 'size_high', 'size_mean',
+        'size_cat', 'participant_measures', 'police_measures', 'participant_injuries',
+        'police_injuries', 'arrests', 'property_damage', 'arrests_any',
+        'participant_casualties_any', 'police_casualties_any', 'property_damage_any',
+        'participant_deaths', 'police_deaths', 'notes', 'source1', 'source2', 'source3',
+        'source4', 'source5', 'source6', 'source7', 'source8', 'source9', 'source10',
+        'source11', 'source12', 'source13', 'source14', 'source15', 'source16', 'source17',
+        'source18', 'source19', 'source20', 'source21', 'source22', 'source23', 'source24',
+        'source25', 'source26', 'source27', 'source28', 'source29', 'source30', 'location_label'
     ]
-    dff_store = dff[store_cols].copy() if all(col in dff.columns for col in store_cols) else dff.copy()
+
+    existing_cols = [col for col in store_cols if col in dff.columns]
+    dff_store = dff[existing_cols].copy()
 
     # Build the small KPI boxes
     largest_event_kpi = [
-        html.Div(f"{largest_event:,.0f}", style={
+        html.Div(f"{largest_event:,.0f} participants", style={
             'fontSize': '1.2rem',
             'fontWeight': '700',
             'color': PRIMARY_WHITE,
@@ -983,7 +1066,7 @@ def update_all(
         })
     ]
     largest_day_kpi = [
-        html.Div(f"{largest_day:,.0f}", style={
+        html.Div(f"{largest_day:,.0f} participants", style={
             'fontSize': '1.2rem',
             'fontWeight': '700',
             'color': PRIMARY_WHITE,
@@ -998,147 +1081,156 @@ def update_all(
         })
     ]
     return (
-        fig_map, fig_momentum, fig_daily, kpis, dff_store.to_json(date_format='iso', orient='split'),
-        fig_cumulative, fig_daily_participants, None,
-        largest_event_kpi, largest_day_kpi
+        fig_map, fig_momentum, fig_daily, kpis, 
+        dff_store.to_json(date_format='iso', orient='split'),
+        fig_cumulative, fig_daily_participants,
+        largest_event_kpi, largest_day_kpi,
+        no_injuries_kpi, no_arrests_kpi, no_damage_kpi
     )
 
-@app.callback(
-    Output('page-content', 'children'),
-    Input('url', 'pathname')
-)
-def display_page(pathname):
-    return dashboard_layout
 
 @app.callback(
     Output('event-details-panel', 'children'),
-    [Input('map-graph', 'clickData'),
-     Input('filtered-data', 'data')]
+    Input('map-graph', 'clickData'),
+    State('filtered-data', 'data')
 )
-def show_event_details(clickData, filtered_json):
-    # Always show the sticky message if nothing is selected
-    if not clickData or not filtered_json:
+def update_event_details(click_data, filtered_data):
+    if not click_data or not filtered_data:
         return html.Div(
             "Click a map marker to see event details.",
-            style={
-                'color': '#555',
-                'fontSize': '.9em',
-                'fontStyle': 'italic',
-                'textAlign': 'center',
-                'padding': '16px 0'
-            }
+            style={'color': '#555', 'fontSize': '.9em', 'fontStyle': 'italic', 'textAlign': 'center', 'padding': '16px 0'}
         )
 
-    dff = pd.read_json(io.StringIO(filtered_json), orient='split')
-    point = clickData['points'][0]
-    location_label = point.get('text') or point.get('hovertext')
-    if not location_label:
-        return html.Div("No details available for this location.", style={'color': '#555', 'margin': '12px 0'})
+    try:
+        dff = pd.read_json(io.StringIO(filtered_data), orient='split')
+        point = click_data['points'][0]
+        location_label = point.get('text') or point.get('hovertext')
+        if not location_label:
+            return html.Div("No details available for this location.", style={'color': '#555', 'margin': '12px 0'})
 
-    # Prevent KeyError
-    if 'location_label' not in dff.columns:
-        return html.Div("No event details found for this marker.", style={'color': '#555', 'margin': '12px 0'})
+        # Normalize for robust matching
+        def norm(x):
+            return str(x).strip().lower() if pd.notnull(x) else ''
 
-    events = dff[dff['location_label'] == location_label]
+        norm_label = norm(location_label)
+        dff['__norm_label'] = dff['location_label'].apply(norm)
+        location_events = dff[dff['__norm_label'] == norm_label]
 
-    if events.empty:
-        return html.Div("No event details found for this marker.", style={'color': '#555', 'margin': '12px 0'})
+        # Fallback: substring match if exact match fails
+        if location_events.empty:
+            location_events = dff[dff['__norm_label'].str.contains(re.escape(norm_label))]
+            if location_events.empty:
+                return html.Div("No event details found for this marker.", style={'color': '#555', 'margin': '12px 0'})
 
-    # Define the fields to display in event details
-    detail_fields = [
-        ('Title', 'title'),
-        ('Locality', 'locality'),
-        ('Date', 'date'),
-        ('Location', 'location'),
-        ('Organizations', 'organizations'),
-        ('Participants', 'size_mean'),
-        ('Notables', 'notables'),
-        ('Targets', 'targets'),
-        ('Claims Summary', 'claims_summary'),
-        ('Participant Measures', 'participant_measures'),
-        ('Police Measures', 'police_measures'),
-        ('Participant Injuries', 'participant_injuries'),
-        ('Police Injuries', 'police_injuries'),
-        ('Arrests', 'arrests'),
-        ('Property Damage', 'property_damage'),
-        ('Notes', 'notes')
-    ]
+        detail_fields = [
+            ('Title', 'title'),
+            ('Date', 'date'),
+            ('Location', 'location'),
+            ('Organizations', 'organizations'),
+            ('Participants', 'size_mean'),
+            ('Notables', 'notables'),
+            ('Targets', 'targets'),
+            ('Claims Summary', 'claims_summary'),
+            ('Participant Measures', 'participant_measures'),
+            ('Police Measures', 'police_measures'),
+            ('Participant Injuries', 'participant_injuries'),
+            ('Police Injuries', 'police_injuries'),
+            ('Arrests', 'arrests'),
+            ('Property Damage', 'property_damage'),
+            ('Notes', 'notes')
+        ]
 
-    details = []
-    for idx, (_, row) in enumerate(events.iterrows()):
-        event_detail = []
-        for label, col in detail_fields:
-            val = row.get(col, 'Unknown')
-            # Handle NaN, empty string, or string 'nan'
-            if pd.isnull(val) or (isinstance(val, str) and (not val.strip() or val.strip().lower() == 'nan')):
-                val = 'Unknown'
-            if col == 'date':
+        details = []
+        for _, event in location_events.iterrows():
+            event_detail = []
+            for label, col in detail_fields:
+                value = event.get(col, 'Unknown')
+                if pd.isnull(value) or (isinstance(value, str) and (not value.strip() or value.strip().lower() == 'nan')):
+                    value = 'Unknown'
+                if col == 'date' and pd.notnull(value):
+                    try:
+                        value = pd.to_datetime(value).strftime('%Y-%m-%d')
+                    except Exception:
+                        value = 'Unknown'
+                event_detail.append(html.P(f"{label}: {value}", style={'margin': '0 0 4px 0'}))
+
+            title = event.get('title', 'Unknown')
+            date = event.get('date', 'Unknown')
+            if pd.notnull(date):
                 try:
-                    val = pd.to_datetime(val).strftime('%Y-%m-%d')
+                    date = pd.to_datetime(date).strftime('%Y-%m-%d')
                 except Exception:
-                    val = 'Unknown'
-            event_detail.append(html.P(f"{label}: {val}", style={'margin': '0 0 4px 0'}))
-        title_val = row.get('title', 'Unknown')
-        if pd.isnull(title_val) or (isinstance(title_val, str) and (not title_val.strip() or title_val.strip().lower() == 'nan')):
-            title_val = 'Unknown'
-        date_val = row.get('date', 'Unknown')
-        try:
-            date_str = pd.to_datetime(date_val).strftime('%Y-%m-%d') if date_val != 'Unknown' else 'Unknown'
-        except Exception:
-            date_str = str(date_val)
-        summary_text = f"{title_val} - {date_str}"
-        details.append(
-            html.Details([
-                html.Summary(
-                    summary_text,
-                    style={'fontWeight': 'bold', 'fontSize': '1.1em'}
-                ),
-                html.Div(event_detail, style={'marginLeft': '12px'})
-            ], open=False, style={'marginBottom': '16px'})
-        )
-    return details
+                    date = 'Unknown'
+            header = f"{title} - {date}"
 
+            details.append(
+                html.Details([
+                    html.Summary(header, style={'fontWeight': 'bold', 'fontSize': '1.1em'}),
+                    html.Div(event_detail, style={'marginLeft': '12px'})
+                ], open=True, style={'marginBottom': '16px'})
+            )
+
+        return html.Div(details, style={'padding': '12px'})
+
+    except Exception as e:
+        return html.Div(
+            f"An error occurred while loading event details: {str(e)}",
+            style={'color': 'red', 'fontSize': '.9em', 'fontStyle': 'italic', 'textAlign': 'center', 'padding': '16px 0'}
+        )
 
 
 @app.callback(
-    Output("download-data", "data"),
-    Input("download-btn", "n_clicks"),
-    State("download-choice", "value"),
-    State('date-range', 'start_date'),
-    State('date-range', 'end_date'),
-    State('size-filter', 'value'),
-    State('org-search', 'value'),
-    State('state-filter', 'value'),
-    State('any-outcomes-filter', 'value'),
+    [Output('filtered-table', 'data'),
+     Output('filtered-table', 'columns')],
+    Input('filtered-data', 'data')
+)
+def update_table(data_json):
+    if not data_json:
+        return [], []
+    dff = pd.read_json(io.StringIO(data_json), orient='split')
+    columns = [
+        {'name': col, 'id': col, 'type': 'text'} if col != 'date' else
+        {'name': col, 'id': col, 'type': 'datetime', 'format': {'specifier': '%Y-%m-%d'}}
+        for col in dff.columns
+    ]
+    return dff.to_dict('records'), columns
+
+
+@app.callback(
+    Output("download-data", "data"),  # Use the correct dcc.Download ID
+    Input("download-btn", "n_clicks"),  # Triggered by the download button
+    State("filtered-data", "data"),  # Use the filtered data
+    State("download-choice", "value"),  # Check if the user wants filtered or full data
     prevent_initial_call=True
 )
-def download_csv(n_clicks, choice, start_date, end_date, size_filter, org_search, state_filter, any_outcomes_filter):
-
-    if not n_clicks:
+def download_filtered_table(n_clicks, filtered_data, download_choice):
+    if not filtered_data:
         return no_update
 
-    if choice == 'full':
-        export_df = df.copy()
-    else:
-        export_df = filter_data(
-            start_date, end_date, size_filter, org_search, state_filter, any_outcomes_filter
-        )
+    # Load the filtered data
+    dff = pd.read_json(io.StringIO(filtered_data), orient='split')
 
-    if 'fallback' in export_df.columns:
-        export_df = export_df.drop(columns=['fallback'])
+    # If the user selects "Full Dataset," return the full dataframe
+    if download_choice == "full":
+        return dcc.send_data_frame(df.to_csv, filename="full_dataset.csv")
 
-    return dcc.send_data_frame(export_df.to_csv, "protest_data.csv", index=False)
+    # Otherwise, return the filtered dataset
+    return dcc.send_data_frame(dff.to_csv, filename="filtered_dataset.csv")
+
 
 @app.callback(
-    Output('sidebar-content', 'children'),
-    Input('toggle-sidebar', 'n_clicks'),
-    prevent_initial_call=False
+    [Output('sidebar-content', 'children'),
+     Output('toggle-definitions', 'children')],
+    Input('toggle-definitions', 'n_clicks'),
+    prevent_initial_call=True
 )
 def toggle_sidebar_content(n_clicks):
-    # Show definitions on odd clicks, filters on even (or 0)
-    if n_clicks and n_clicks % 2 == 1:
-        return definitions_panel
-    return filter_panel
+    if n_clicks % 2 == 1:
+        return definitions_panel, "Show Filters"
+    else:
+        return filter_panel, "Show Data Definitions & Sources"
+
+
 # Uncomment the following 2 lines to run the app directly and test locally. Comment back out when deploying to production.
 # if __name__ == '__main__':
 #     app.run(debug=True)
