@@ -511,7 +511,7 @@ app.layout = html.Div([
         'boxSizing': 'border-box',
         'flexGrow': '1',
         'overflow': 'auto',
-        'backgroundColor': '#f5f6fa',
+        'backgroundColor': PRIMARY_WHITE,
         'borderRadius': '12px 0 0 12px',
         'fontFamily': FONT_FAMILY,
         'transition': 'width 0.3s cubic-bezier(.4,2,.6,1)'
@@ -523,7 +523,7 @@ app.layout = html.Div([
     'height': '100vh',
     'overflow': 'hidden',
     'fontFamily': FONT_FAMILY,
-    'backgroundColor': '#e9ecef'
+    'backgroundColor': PRIMARY_WHITE
 })
 
 # Sidebar with collapsible toggle tab
@@ -645,7 +645,7 @@ def render_sidebar(is_open):
         'boxSizing': 'border-box',
         'flexGrow': '1',
         'overflow': 'auto',
-        'backgroundColor': '#f5f6fa',
+        'backgroundColor': PRIMARY_WHITE,
         'borderRadius': '12px 0 0 12px',
         'fontFamily': FONT_FAMILY,
         'transition': 'width 0.3s cubic-bezier(.4,2,.6,1)'
@@ -929,6 +929,7 @@ def update_all(
                 marker=dict(
                     size=has_size['size_mean'],
                     color=PRIMARY_BLUE,
+                    opacity=1.0,
                     sizemode='area',
                     sizeref=sizeref,
                     sizemin=5
@@ -941,7 +942,8 @@ def update_all(
                     "Participants: %{customdata[1]:,.0f}<br>"
                     "<extra></extra>"
                 ),
-                name="Has Size"
+                name="Has Participant Count",
+                showlegend=False  # Hide from legend
             ))
 
         if not no_size.empty:
@@ -963,8 +965,25 @@ def update_all(
                     "Events at this site: %{customdata[0]}<br>"
                     "<extra></extra>"
                 ),
-                name="Missing Size"
+                name="Missing Participant Count",
+                showlegend=False  # Hide from legend
             ))
+
+        # Only these traces will appear in the legend, with consistent dot sizes:
+        fig_map.add_trace(go.Scattermapbox(
+            lat=[None], lon=[None],
+            mode='markers',
+            marker=dict(size=16, color=PRIMARY_BLUE),
+            name="Has Participant Count",
+            showlegend=True
+        ))
+        fig_map.add_trace(go.Scattermapbox(
+            lat=[None], lon=[None],
+            mode='markers',
+            marker=dict(size=16, color=PRIMARY_RED),
+            name="Missing Participant Count",
+            showlegend=True
+        ))
 
         fig_map.update_layout(
             mapbox_style="carto-positron",
@@ -1138,7 +1157,7 @@ def update_event_details(click_data, filtered_data):
     except Exception as e:
         return html.Div(
             f"An error occurred while loading event details: {str(e)}",
-            style={'color': 'red', 'fontSize': '.9em', 'fontStyle': 'italic', 'textAlign': 'center', 'padding': '16px 0'}
+            style={'color': PRIMARY_RED, 'fontSize': '.9em', 'fontStyle': 'italic', 'textAlign': 'center', 'padding': '16px 0'}
         )
 
 
@@ -1196,5 +1215,5 @@ def toggle_sidebar_content(n_clicks):
 
 
 # Uncomment the following 2 lines to run the app directly and test locally. Comment back out when deploying to production.
-# if __name__ == '__main__':
-#     app.run(debug=True)
+if __name__ == '__main__':
+    app.run(debug=True)
