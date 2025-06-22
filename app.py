@@ -8,6 +8,7 @@ import os
 import random
 import re
 import io
+import time
 
 # Data file path
 file_path = "ccc_anti_trump.csv"  
@@ -666,21 +667,28 @@ def render_sidebar(is_open):
     return get_sidebar(is_open), main_style
 
 def jitter_coords(df, lat_col='lat', lon_col='lon', jitter_amount=0.05):
-    
-    # Add random jitter to duplicate lat/lon pairs in a DataFrame.
+    """
+    For duplicate lat/lon pairs, arrange all but the first equidistantly in a circle around the main point.
+    The first event stays at the center.
+    """
     df = df.copy().reset_index(drop=True)
-    coords = df[[lat_col, lon_col]].astype(str).agg('_'.join, axis=1)
+    coords = df[[lat_col, lon_col]].round(5).astype(str).agg('_'.join, axis=1)
     counts = coords.value_counts()
     dup_coords = counts[counts > 1].index
+
     for coord in dup_coords:
         idxs = df.index[coords == coord].tolist()
-        for offset, i in enumerate(idxs):
-            if offset == 0:
-                continue  # Leave the first as is so they don't all move
-            angle = random.uniform(0, 2 * np.pi)
-            radius = random.uniform(0.0005, jitter_amount)
-            df.at[i, lat_col] += np.cos(angle) * radius
-            df.at[i, lon_col] += np.sin(angle) * radius
+        n = len(idxs)
+        if n <= 1:
+            continue
+        center_lat = float(df.at[idxs[0], lat_col])
+        center_lon = float(df.at[idxs[0], lon_col])
+        # Place the rest in a circle around the center
+        for k, i in enumerate(idxs[1:], 1):
+            angle = 2 * np.pi * (k - 1) / (n - 1)
+            radius = jitter_amount
+            df.at[i, lat_col] = center_lat + np.cos(angle) * radius
+            df.at[i, lon_col] = center_lon + np.sin(angle) * radius
     return df
 
 
@@ -782,61 +790,43 @@ def aggregate_events_for_map(dff_map):
     return agg
 
 @app.callback(
-    [
-        Output('map-graph', 'figure'),
-        Output('momentum-graph', 'figure'),
-        Output('daily-graph', 'figure'),
-        Output('cumulative-graph', 'figure'),
-        Output('daily-participant-graph', 'figure'),
-        Output('filtered-data', 'data'),
-        Output('total-events-kpi', 'children'),
-        Output('largest-event-kpi', 'children'),
-        Output('mean-size-kpi', 'children'),
-        Output('largest-day-kpi', 'children'),
-        Output('percent-us-pop-kpi', 'children'),
-        Output('total-participants-kpi', 'children'),
-        Output('percent-no-size-kpi', 'children'),
-        Output('no-injuries-kpi', 'children'),
-        Output('no-arrests-kpi', 'children'),
-        Output('no-damage-kpi', 'children')
-    ],
-    [
-        Input('url', 'pathname'),
-        Input('date-range', 'start_date'),
-        Input('date-range', 'end_date'),
-        Input('size-filter', 'value'),
-        Input('org-search', 'value'),
-        Input('state-filter', 'value'),
-        Input('any-outcomes-filter', 'value')
-    ]
+   [
+       Output('map-graph', 'figure'),
+       Output('momentum-graph', 'figure'),
+       Output('daily-graph', 'figure'),
+       Output('filtered-data', 'data'),
+       Output('cumulative-graph', 'figure'),
+       Output('daily-participant-graph', 'figure'),
+       Output('total-events-kpi', 'children'),
+       Output('largest-event-kpi', 'children'),
+       Output('mean-size-kpi', 'children'),
+       Output('largest-day-kpi', 'children'),
+       Output('total-participants-kpi', 'children'),
+       Output('percent-no-size-kpi', 'children'),
+       Output('no-injuries-kpi', 'children'),
+       Output('no-arrests-kpi', 'children'),
+       Output('no-damage-kpi', 'children'),
+       Output('percent-us-pop-kpi', 'children'),
+   ],
+   [
+       Input('date-range', 'start_date'),
+       Input('date-range', 'end_date'),
+       Input('size-filter', 'value'),
+       Input('org-search', 'value'),
+       Input('state-filter', 'value'),
+       Input('any-outcomes-filter', 'value')
+   ]
 )
 def update_all(
-    pathname, start_date=None, end_date=None, size_filter='all', org_search=None,
-    state_filter=None, any_outcomes_filter=None
+    start_date, end_date, size_filter, org_search, state_filter,
+    any_outcomes_filter
 ):
-    # Set default values if inputs are None
-    start_date = start_date or df['date'].min()
-    end_date = end_date or df['date'].max()
-    size_filter = size_filter or 'all'
-    org_search = org_search or ''
-    state_filter = state_filter or []
-    any_outcomes_filter = any_outcomes_filter or []
-
+    t0 = time.time()
     dff = filter_data(
         start_date, end_date, size_filter, org_search, state_filter,
         any_outcomes_filter
     )
-
-    # Handle empty dataset
-    if dff.empty:
-        empty_fig = go.Figure()
-        empty_kpi = ""
-        return (
-            empty_fig, empty_fig, empty_fig, empty_fig, empty_fig,
-            dff.to_json(date_format='iso', orient='split'),
-            empty_kpi, empty_kpi, empty_kpi, empty_kpi, empty_kpi,
-            empty_kpi, empty_kpi, empty_kpi, empty_kpi, empty_kpi
-        )
+    t1 = time.time()
 
     # Metrics
     total_events = len(dff)
@@ -925,95 +915,110 @@ def update_all(
 
     # Defensive: Ensure 'lat' and 'lon' columns exist and are not all missing
     if 'lat' not in dff.columns or 'lon' not in dff.columns or dff['lat'].isnull().all() or dff['lon'].isnull().all():
-        fig_map = go.Figure()
-    else:
-        agg_map = aggregate_events_for_map(dff)
-        has_size = agg_map[agg_map['size_mean'].notna()]
-        no_size = agg_map[agg_map['size_mean'].isna()]
-        fig_map = go.Figure()
-
-        if not has_size.empty:
-            max_size = has_size['size_mean'].max()
-            sizeref = 2.0 * max_size / (50.0 ** 2) if max_size > 0 else 1
-            fig_map.add_trace(go.Scattermapbox(
-                lat=has_size['lat'],
-                lon=has_size['lon'],
-                mode='markers',
-                marker=dict(
-                    size=has_size['size_mean'],
-                    color=PRIMARY_BLUE,
-                    opacity=1.0,
-                    sizemode='area',
-                    sizeref=sizeref,
-                    sizemin=5
-                ),
-                text=has_size['text'],
-                customdata=has_size[['count', 'size_mean']].values,
-                hovertemplate=(
-                    "<b>%{text}</b><br><br>"
-                    "Events at this site: %{customdata[0]}<br>"
-                    "Participants: %{customdata[1]:,.0f}<br>"
-                    "<extra></extra>"
-                ),
-                name="Has Participant Count",
-                showlegend=False  # Hide from legend
-            ))
-
-        if not no_size.empty:
-            fig_map.add_trace(go.Scattermapbox(
-                lat=no_size['lat'],
-                lon=no_size['lon'],
-                mode='markers',
-                marker=dict(
-                    size=12,
-                    color=PRIMARY_RED,
-                    sizemode='area',
-                    sizeref=1,
-                    sizemin=5
-                ),
-                text=no_size['text'],
-                customdata=no_size[['count']].values,
-                hovertemplate=(
-                    "<b>%{text}</b><br><br>"
-                    "Events at this site: %{customdata[0]}<br>"
-                    "<extra></extra>"
-                ),
-                name="Missing Participant Count",
-                showlegend=False  # Hide from legend
-            ))
-
-        # Only these traces will appear in the legend, with consistent dot sizes:
-        fig_map.add_trace(go.Scattermapbox(
-            lat=[None], lon=[None],
-            mode='markers',
-            marker=dict(size=16, color=PRIMARY_BLUE),
-            name="Has Participant Count",
-            showlegend=True
-        ))
-        fig_map.add_trace(go.Scattermapbox(
-            lat=[None], lon=[None],
-            mode='markers',
-            marker=dict(size=16, color=PRIMARY_RED),
-            name="Missing Participant Count",
-            showlegend=True
-        ))
-
-        fig_map.update_layout(
-            mapbox_style="carto-positron",
-            mapbox_zoom=3,
-            mapbox_center={"lat": 39.8283, "lon": -98.5795},
-            margin=standard_margin,
-            height=500,
-            showlegend=True,
-            legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=-0.18,
-                xanchor="center",
-                x=0.5,
-                font=dict(size=12)
-            )
+        empty_fig = go.Figure()
+        largest_event_kpi = []
+        largest_day_kpi = []
+        return (
+            empty_fig, empty_fig, empty_fig, kpis,
+            dff.to_json(date_format='iso', orient='split'),
+            empty_fig, empty_fig,
+            html.Div(
+                "No events with valid location data for the selected filters.",
+                style={'color': 'red', 'fontWeight': 'bold', 'fontSize': '1.2em', 'margin': '20px 0'}
+            ),
+            largest_event_kpi, largest_day_kpi
         )
+
+    # --- JITTER COORDINATES BEFORE AGGREGATION ---
+    dff_jittered = jitter_coords(dff, lat_col='lat', lon_col='lon', jitter_amount=0.002)
+    agg_map = aggregate_events_for_map(dff_jittered)
+
+    has_size = agg_map[agg_map['size_mean'].notna()]
+    no_size = agg_map[agg_map['size_mean'].isna()]
+    fig_map = go.Figure()
+
+    if not has_size.empty:
+        max_size = has_size['size_mean'].max()
+        sizeref = 2.0 * max_size / (50.0 ** 2) if max_size > 0 else 1
+        fig_map.add_trace(go.Scattermapbox(
+            lat=has_size['lat'],
+            lon=has_size['lon'],
+            mode='markers',
+            marker=dict(
+                size=has_size['size_mean'],
+                color=PRIMARY_BLUE,
+                opacity=1.0,
+                sizemode='area',
+                sizeref=sizeref,
+                sizemin=5
+            ),
+            text=has_size['text'],
+            customdata=has_size[['count', 'size_mean']].values,
+            hovertemplate=(
+                "<b>%{text}</b><br><br>"
+                "Events at this site: %{customdata[0]}<br>"
+                "Participants: %{customdata[1]:,.0f}<br>"
+                "<extra></extra>"
+            ),
+            name="Has Participant Count",
+            showlegend=False  # Hide from legend
+        ))
+
+    if not no_size.empty:
+        fig_map.add_trace(go.Scattermapbox(
+            lat=no_size['lat'],
+            lon=no_size['lon'],
+            mode='markers',
+            marker=dict(
+                size=12,
+                color=PRIMARY_RED,
+                sizemode='area',
+                sizeref=1,
+                sizemin=5
+            ),
+            text=no_size['text'],
+            customdata=no_size[['count']].values,
+            hovertemplate=(
+                "<b>%{text}</b><br><br>"
+                "Events at this site: %{customdata[0]}<br>"
+                "<extra></extra>"
+            ),
+            name="Missing Participant Count",
+            showlegend=False  # Hide from legend
+        ))
+
+    # Only these traces will appear in the legend, with consistent dot sizes:
+    fig_map.add_trace(go.Scattermapbox(
+        lat=[None], lon=[None],
+        mode='markers',
+        marker=dict(size=16, color=PRIMARY_BLUE),
+        name="Has Participant Count",
+        showlegend=True
+    ))
+    fig_map.add_trace(go.Scattermapbox(
+        lat=[None], lon=[None],
+        mode='markers',
+        marker=dict(size=16, color=PRIMARY_RED),
+        name="Missing Participant Count",
+        showlegend=True
+    ))
+
+    fig_map.update_layout(
+        mapbox_style="carto-positron",
+        mapbox_zoom=3,
+        mapbox_center={"lat": 39.8283, "lon": -98.5795},
+        margin=standard_margin,
+        height=500,
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=-0.18,
+            xanchor="center",
+            x=0.5,
+            font=dict(size=12)
+        )
+    )
 
     # Momentum graph
     dff_momentum = dff[['date', 'participants_numeric']].dropna()
@@ -1077,10 +1082,22 @@ def update_all(
         dff['location_label'] = dff.apply(best_location, axis=1)
 
     return (
-            fig_map, fig_momentum, fig_daily, fig_cumulative, fig_daily_participant_graph,
-            dff.to_json(date_format='iso', orient='split'),
-            total_events_kpi, largest_event_kpi, mean_size_kpi, largest_day_kpi, percent_us_pop_kpi,
-            total_participants_kpi, percent_no_size_kpi, no_injuries_kpi, no_arrests_kpi, no_damage_kpi
+        fig_map,
+        fig_momentum,
+        fig_daily,
+        dff.to_json(date_format='iso', orient='split'),
+        fig_cumulative,
+        fig_daily_participant_graph,
+        total_events_kpi,
+        largest_event_kpi,
+        mean_size_kpi,
+        largest_day_kpi,
+        total_participants_kpi,
+        percent_no_size_kpi,
+        no_injuries_kpi,
+        no_arrests_kpi,
+        no_damage_kpi,
+        percent_us_pop_kpi
     ) 
 
 @app.callback(
