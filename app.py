@@ -228,6 +228,12 @@ definitions_panel = html.Div([
                 "This provides a standardized estimate of participant size for each event. Some events may have missing or uncertain size estimates."
             ]),
             html.Li([
+                html.B("Momentum of Dissent: "),
+                "For each day, the sum of estimated participants is multiplied by the number of events that day. "
+                "The 'Momentum of Dissent' shown in the dashboard is the sum of these daily values over the most recent 7 days (a rolling 7-day sum). "
+                "This highlights periods of sustained, high-volume protest activity."
+            ]),
+            html.Li([
                 html.B("Organizations: "),
                 "Organizations are listed as a semicolon-separated string. Organization search matches any substring in this field."
             ]),
@@ -394,7 +400,7 @@ app.layout = html.Div([
                 }),
                 html.Div(id='mean-size-kpi', style={
                     'flex': '1', 'textAlign': 'center', 'padding': '7px', 'borderRadius': '10px',
-                    'backgroundColor': PRIMARY_RED, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 3px'
+                    'backgroundColor': PRIMARY_BLUE, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 3px'
                 }),
                 html.Div(id='largest-day-kpi', style={
                     'flex': '1', 'textAlign': 'center', 'padding': '7px', 'borderRadius': '10px',
@@ -417,7 +423,7 @@ app.layout = html.Div([
                 }),
                 html.Div(id='no-arrests-kpi', style={
                     'flex': '1', 'textAlign': 'center', 'padding': '7px', 'borderRadius': '10px',
-                    'backgroundColor': PRIMARY_BLUE, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 3px'
+                    'backgroundColor': PRIMARY_RED, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 3px'
                 }),
                 html.Div(id='no-damage-kpi', style={
                     'flex': '1', 'textAlign': 'center', 'padding': '7px', 'borderRadius': '10px',
@@ -1006,29 +1012,28 @@ def update_all(
     dff_momentum = dff[['date', 'participants_numeric']].dropna()
     dff_momentum = dff_momentum.set_index('date').resample('D').agg(['sum', 'count'])
     dff_momentum.columns = ['sum', 'count']
-    dff_momentum['momentum'] = dff_momentum['sum'] * dff_momentum['count']
-    dff_momentum['alt_momentum'] = dff_momentum['sum'].rolling(7).sum()
+    # Momentum of Dissent OVER 7 DAYS = (sum of participants per day) × (number of events per day), summed over the last 7 days
+    dff_momentum['momentum'] = (dff_momentum['sum'] * dff_momentum['count']).rolling(7).sum()
     dff_momentum = dff_momentum.reset_index()
 
     fig_momentum = go.Figure()
     fig_momentum.add_trace(go.Scatter(
-        x=dff_momentum['date'], y=dff_momentum['momentum'], mode='lines', name='Momentum'
+        x=dff_momentum['date'], y=dff_momentum['momentum'], mode='lines', name='Momentum (7-Day Sum)'
     ))
-    fig_momentum.add_trace(go.Scatter(
-        x=dff_momentum['date'], y=dff_momentum['alt_momentum'], mode='lines', name='7-Day Rolling'
-    ))
-    # Add trendline (linear regression)
-    z = np.polyfit(
-        pd.to_numeric(dff_momentum['date']), dff_momentum['momentum'], 1
-    ) if len(dff_momentum) > 1 else [0, 0]
-    p = np.poly1d(z)
-    fig_momentum.add_trace(go.Scatter(
-        x=dff_momentum['date'],
-        y=p(pd.to_numeric(dff_momentum['date'])),
-        mode='lines',
-        name='Trendline',
-        line=dict(dash='dash', color='gray')
-    ))
+    # Add trendline (linear regression) to the 7-day momentum
+    valid = dff_momentum['momentum'].notna()
+    if valid.sum() > 1:
+        z = np.polyfit(
+            pd.to_numeric(dff_momentum.loc[valid, 'date']), dff_momentum.loc[valid, 'momentum'], 1
+        )
+        p = np.poly1d(z)
+        fig_momentum.add_trace(go.Scatter(
+            x=dff_momentum.loc[valid, 'date'],
+            y=p(pd.to_numeric(dff_momentum.loc[valid, 'date'])),
+            mode='lines',
+            name='Trendline',
+            line=dict(dash='dash', color='gray')
+        ))
     fig_momentum.update_layout(height=270, margin=standard_margin)
 
     # Daily event count
@@ -1215,5 +1220,5 @@ def toggle_sidebar_content(n_clicks):
 
 
 # Uncomment the following 2 lines to run the app directly and test locally. Comment back out when deploying to production.
-# if __name__ == '__main__':
-#     app.run(debug=True)
+if __name__ == '__main__':
+    app.run(debug=True)
