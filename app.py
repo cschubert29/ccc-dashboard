@@ -231,7 +231,14 @@ definitions_panel = html.Div([
                 html.B("Momentum of Dissent: "),
                 "For each day, the sum of estimated participants is multiplied by the number of events that day. "
                 "The 'Momentum of Dissent' shown in the dashboard is the sum of these daily values over the most recent 7 days (a rolling 7-day sum). "
-                "This highlights periods of sustained, high-volume protest activity."
+                "This highlights periods of sustained, high-volume protest activity. "
+                "The concept and approach for 'momentum' as a protest metric is inspired by the methodology described in: ",
+                html.A(
+                    "Chenoweth, E., Perkoski, E., & Kang, S. (2017). State Repression and Nonviolent Resistance. Research in Social Movements, Conflicts and Change, 41, 85–117.",
+                    href="https://bura.brunel.ac.uk/bitstream/2438/19075/1/FullText.pdf",
+                    target="_blank"
+                ),
+                ". In that work, 'movement momentum' is used to capture the intensity and persistence of protest activity over time."
             ]),
             html.Li([
                 html.B("Organizations: "),
