@@ -481,7 +481,13 @@ app.layout = html.Div([
                             'marginBottom': '4px',
                             'textAlign': 'center'
                         }),
-                        dcc.Graph(id='momentum-graph', config={'displayModeBar': True})
+                        dcc.Graph(
+                            id='momentum-graph',
+                            config={
+                                'displayModeBar': True,
+                                'modeBarButtonsToRemove': ['select2d', 'lasso2d']
+                            }
+                        )
                     ]),
                     html.Div([
                         html.Div("Daily Event Count", style={
@@ -490,7 +496,13 @@ app.layout = html.Div([
                             'marginBottom': '4px',
                             'textAlign': 'center'
                         }),
-                        dcc.Graph(id='daily-graph', config={'displayModeBar': True})
+                        dcc.Graph(
+                            id='daily-graph',
+                            config={
+                                'displayModeBar': True,
+                                'modeBarButtonsToRemove': ['select2d', 'lasso2d']
+                            }
+                        )
                     ]),
                     html.Div([
                         html.Div("Cumulative Total Events", style={
@@ -499,7 +511,13 @@ app.layout = html.Div([
                             'marginBottom': '4px',
                             'textAlign': 'center'
                         }),
-                        dcc.Graph(id='cumulative-graph', config={'displayModeBar': True})
+                        dcc.Graph(
+                            id='cumulative-graph',
+                            config={
+                                'displayModeBar': True,
+                                'modeBarButtonsToRemove': ['select2d', 'lasso2d']
+                            }
+                        )
                     ]),
                     html.Div([
                         html.Div("Daily Participant Count", style={
@@ -508,7 +526,13 @@ app.layout = html.Div([
                             'marginBottom': '4px',
                             'textAlign': 'center'
                         }),
-                        dcc.Graph(id='daily-participant-graph', config={'displayModeBar': True})
+                        dcc.Graph(
+                            id='daily-participant-graph',
+                            config={
+                                'displayModeBar': True,
+                                'modeBarButtonsToRemove': ['select2d', 'lasso2d']
+                            }
+                        )
                     ])
                 ]),
                 dcc.Tab(label='Table', value='table', children=[
@@ -1379,5 +1403,5 @@ def update_city_options(selected_states, selected_cities):
     return options, new_selected
 
 # Uncomment the following 2 lines to run the app directly and test locally. Comment back out when deploying to production.
-if __name__ == '__main__':
-    app.run(debug=True)
+# if __name__ == '__main__':
+#     app.run(debug=True)
