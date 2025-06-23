@@ -1379,5 +1379,5 @@ def update_city_options(selected_states, selected_cities):
     return options, new_selected
 
 # Uncomment the following 2 lines to run the app directly and test locally. Comment back out when deploying to production.
-if __name__ == '__main__':
-    app.run(debug=True)
+# if __name__ == '__main__':
+#     app.run(debug=True)
