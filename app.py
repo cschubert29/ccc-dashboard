@@ -40,6 +40,12 @@ else:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce')
 
+    # After loading df (right after reading CSV or Parquet), add this:
+    if 'property_damage' in df.columns:
+        df['property_damage_any'] = (
+            df['property_damage'].notna() & (df['property_damage'].astype(str).str.strip() != "")
+        ).astype(int)
+
     df.to_parquet(processed_file)  # Save the processed DataFrame
 
 app = Dash(__name__, suppress_callback_exceptions=True)
@@ -91,12 +97,12 @@ filter_panel = html.Div([
             'fontFamily': FONT_FAMILY
         }
     ),
-    html.Label("Participant Size Filter", style={'fontFamily': FONT_FAMILY}),
+    html.Label("Participant Count Filter", style={'fontFamily': FONT_FAMILY}),
     dcc.RadioItems(
         id='size-filter',
         options=[
-            {'label': 'Has participant size', 'value': 'has'},
-            {'label': 'No participant size', 'value': 'no'},
+            {'label': 'Has participant count', 'value': 'has'},
+            {'label': 'No participant count', 'value': 'no'},
             {'label': 'All events', 'value': 'all'}
         ],
         value='all',
@@ -122,6 +128,15 @@ filter_panel = html.Div([
         multi=True,
         placeholder="Select state(s) or territory(ies)",
         clearable=True,
+        style={'marginBottom': '20px', 'borderRadius': '8px', 'fontFamily': FONT_FAMILY}
+    ),
+    html.Label("City", style={'fontFamily': FONT_FAMILY}),
+    dcc.Dropdown(
+        id='city-filter',
+        options=[],  # Start empty; will be populated by callback
+        value=[],
+        multi=True,
+        placeholder="Select a state first for cities",        clearable=True,
         style={'marginBottom': '20px', 'borderRadius': '8px', 'fontFamily': FONT_FAMILY}
     ),
     html.Label("Event Outcomes", style={'fontFamily': FONT_FAMILY}),
@@ -224,7 +239,7 @@ definitions_panel = html.Div([
                 "This dashboard uses a dataset filtered to include only anti-Trump events. Events that may be against him but do not mention him explicitly may not be included here."
             ]),
             html.Li([
-                html.B("Participant Size: "),
+                html.B("Participant Count: "),
                 "The 'size_mean' field is an average of the upper and lower range estimates of crowd size, as reported. "
                 "This provides a standardized estimate of participant size for each event. Some events may have missing or uncertain size estimates."
             ]),
@@ -449,7 +464,13 @@ app.layout = html.Div([
             value='map',
             children=[
                 dcc.Tab(label='Map', value='map', children=[
-                    dcc.Graph(id='map-graph'),
+                    dcc.Graph(
+                        id='map-graph',
+                        config={
+                            'displayModeBar': True,
+                            'modeBarButtonsToRemove': ['select2d', 'lasso2d']
+                        }
+                    ),
                     html.Div(id='event-details-panel')
                 ]),
                 dcc.Tab(label='Graphs', value='graphs', children=[
@@ -703,32 +724,64 @@ def jitter_coords(df, lat_col='lat', lon_col='lon', jitter_amount=0.05):
 @cache.memoize(timeout=120)
 def filter_data(
     start_date, end_date, size_filter, org_search, state_filter,
-    any_outcomes_filter
+    city_filter, any_outcomes_filter
 ):
     dff = df
     mask = pd.Series(True, index=dff.index)
 
-    # Apply filters
+    # Only convert columns that should be numeric for filtering
+    for col in [
+        'arrests', 'participant_injuries', 'police_injuries',
+        'participant_deaths', 'police_deaths'
+    ]:
+        if col in dff.columns:
+            dff[col] = pd.to_numeric(dff[col], errors='coerce')
+
+    # DO NOT convert 'property_damage' to numeric here!
+    # The boolean column 'property_damage_any' is already created at load time.
+
+    # Date filter
     if start_date and end_date:
         mask &= (dff['date'] >= start_date) & (dff['date'] <= end_date)
+
+    # Size filter
     if size_filter == 'has':
         mask &= dff['size_mean'].notna()
     elif size_filter == 'no':
         mask &= dff['size_mean'].isna()
-    if org_search:
-        pattern = '|'.join(map(re.escape, org_search.lower().split(',')))
-        mask &= dff['organizations'].str.contains(pattern, na=False, regex=True)
-    if state_filter:
+    # else 'all': do nothing
+
+    # Organization search (case-insensitive, split by comma)
+    if org_search and org_search.strip():
+        orgs = [o.strip() for o in org_search.lower().split(',') if o.strip()]
+        if orgs:
+            pattern = '|'.join(map(re.escape, orgs))
+            mask &= dff['organizations'].str.contains(pattern, na=False, regex=True)
+
+    # State filter (only if not empty)
+    if state_filter and len(state_filter) > 0:
         mask &= dff['state'].isin(state_filter)
 
-    # Apply outcomes filters
+    # City filter (only if not empty)
+    if city_filter and len(city_filter) > 0:
+        mask &= dff['resolved_locality'].isin(city_filter)
+
+    # Outcomes filters
     for outcome in any_outcomes_filter:
         if outcome == 'arrests_any':
             mask &= dff['arrests'].notna() & (dff['arrests'] > 0)
         elif outcome == 'participant_injuries_any':
             mask &= dff['participant_injuries'].notna() & (dff['participant_injuries'] > 0)
+        elif outcome == 'police_injuries_any':
+            mask &= dff['police_injuries'].notna() & (dff['police_injuries'] > 0)
+        elif outcome == 'property_damage_any':
+            mask &= dff['property_damage_any'] == 1
+        elif outcome == 'participant_deaths_any':
+            mask &= dff['participant_deaths'].notna() & (dff['participant_deaths'] > 0)
+        elif outcome == 'police_deaths_any':
+            mask &= dff['police_deaths'].notna() & (dff['police_deaths'] > 0)
 
-    return dff.loc[mask]
+    return dff.loc[mask].copy()
 
 @cache.memoize(timeout=120)
 def aggregate_events_for_map(dff_map):
@@ -814,17 +867,18 @@ def aggregate_events_for_map(dff_map):
        Input('size-filter', 'value'),
        Input('org-search', 'value'),
        Input('state-filter', 'value'),
+       Input('city-filter', 'value'),
        Input('any-outcomes-filter', 'value')
    ]
 )
 def update_all(
     start_date, end_date, size_filter, org_search, state_filter,
-    any_outcomes_filter
+    city_filter, any_outcomes_filter
 ):
     t0 = time.time()
     dff = filter_data(
         start_date, end_date, size_filter, org_search, state_filter,
-        any_outcomes_filter
+        city_filter, any_outcomes_filter
     )
     t1 = time.time()
 
@@ -839,7 +893,12 @@ def update_all(
 
     percent_no_injuries = 100 * (dff['participant_injuries'].isna().sum() / total_events) if total_events > 0 else 0
     percent_no_arrests = 100 * (dff['arrests'].isna().sum() / total_events) if total_events > 0 else 0
-    percent_no_damage = 100 * (dff['property_damage'].isna().sum() / total_events) if total_events > 0 else 0
+
+    # Use property_damage_any for KPI calculation
+    if 'property_damage_any' in dff.columns:
+        percent_no_damage = 100 * (dff['property_damage_any'] == 0).sum() / total_events if total_events > 0 else 0
+    else:
+        percent_no_damage = 0
 
     # KPI children (match layout order)
     total_events_kpi = [
@@ -916,21 +975,50 @@ def update_all(
     # Defensive: Ensure 'lat' and 'lon' columns exist and are not all missing
     if 'lat' not in dff.columns or 'lon' not in dff.columns or dff['lat'].isnull().all() or dff['lon'].isnull().all():
         empty_fig = go.Figure()
-        largest_event_kpi = []
-        largest_day_kpi = []
+        empty_fig.add_annotation(
+            text="No matching data available for the selected filters.",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5, showarrow=False,
+            font=dict(size=22, color="red"),
+            align="center"
+        )
+        empty_fig.update_layout(
+            mapbox_style="carto-positron",
+            mapbox_zoom=3,
+            mapbox_center={"lat": 39.8283, "lon": -98.5795},
+            margin=standard_margin,
+            height=500,
+            showlegend=False
+        )
+        empty_json = dff.to_json(date_format='iso', orient='split')
+        dash_kpi = lambda label, icon="—": [
+            html.Div([
+                html.Div("-", style={'fontSize': '1.35rem', 'fontWeight': '700'}),
+                html.Div(icon, style={'fontSize': '1.2rem', 'margin': '0'}),
+                html.Div(label, style={'fontSize': '0.85rem', 'margin': '0'})
+            ], style={'marginBottom': '0'})
+        ]
         return (
-            empty_fig, empty_fig, empty_fig, kpis,
-            dff.to_json(date_format='iso', orient='split'),
-            empty_fig, empty_fig,
-            html.Div(
-                "No events with valid location data for the selected filters.",
-                style={'color': 'red', 'fontWeight': 'bold', 'fontSize': '1.2em', 'margin': '20px 0'}
-            ),
-            largest_event_kpi, largest_day_kpi
+            empty_fig,  # map-graph
+            empty_fig,  # momentum-graph
+            empty_fig,  # daily-graph
+            empty_json, # filtered-data
+            empty_fig,  # cumulative-graph
+            empty_fig,  # daily-participant-graph
+            dash_kpi("Total Events", "🗓️"),
+            dash_kpi("Largest Event", "🥇"),
+            dash_kpi("Average Participant Count", "📊"),
+            dash_kpi("Largest Day", "🥇"),
+            dash_kpi("Total Participants", "🌟"),
+            dash_kpi("Events Missing Size", "🔍"),
+            dash_kpi("% with No Injuries", "🚑"),
+            dash_kpi("% with No Arrests", "🚔"),
+            dash_kpi("% with No Property Damage", "🏚️"),
+            dash_kpi("Most Daily Participants as % of USA", "🌎")
         )
 
-    # --- JITTER COORDINATES BEFORE AGGREGATION ---
-    dff_jittered = jitter_coords(dff, lat_col='lat', lon_col='lon', jitter_amount=0.002)
+    # Jitter coordinates for map visualization
+    dff_jittered = jitter_coords(dff, lat_col='lat', lon_col='lon', jitter_amount=0.01)
     agg_map = aggregate_events_for_map(dff_jittered)
 
     has_size = agg_map[agg_map['size_mean'].notna()]
@@ -947,7 +1035,7 @@ def update_all(
             marker=dict(
                 size=has_size['size_mean'],
                 color=PRIMARY_BLUE,
-                opacity=1.0,
+                opacity=.5,
                 sizemode='area',
                 sizeref=sizeref,
                 sizemin=5
@@ -973,6 +1061,7 @@ def update_all(
                 size=12,
                 color=PRIMARY_RED,
                 sizemode='area',
+                opacity=.5,
                 sizeref=1,
                 sizemin=5
             ),
@@ -1003,10 +1092,24 @@ def update_all(
         showlegend=True
     ))
 
+    # Determine map center and zoom
+    if not dff.empty and (city_filter and len(city_filter) > 0):
+        center_lat = dff['lat'].mean()
+        center_lon = dff['lon'].mean()
+        zoom = 10 if len(city_filter) == 1 else 13
+    elif not dff.empty and (state_filter and len(state_filter) > 0):
+        center_lat = dff['lat'].mean()
+        center_lon = dff['lon'].mean()
+        zoom = 5
+    else:
+        center_lat = 39.8283
+        center_lon = -98.5795
+        zoom = 3
+
     fig_map.update_layout(
         mapbox_style="carto-positron",
-        mapbox_zoom=3,
-        mapbox_center={"lat": 39.8283, "lon": -98.5795},
+        mapbox_zoom=zoom,
+        mapbox_center={"lat": center_lat, "lon": center_lon},
         margin=standard_margin,
         height=500,
         showlegend=True,
@@ -1133,15 +1236,20 @@ def update_event_details(click_data, filtered_data):
             if location_events.empty:
                 return html.Div("No event details found for this marker.", style={'color': '#555', 'margin': '12px 0'})
 
-        detail_fields = [
+        # Always show these fields (with "Unknown" if missing)
+        always_fields = [
             ('Title', 'title'),
             ('Date', 'date'),
             ('Location', 'location'),
             ('Organizations', 'organizations'),
             ('Participants', 'size_mean'),
-            ('Notables', 'notables'),
             ('Targets', 'targets'),
-            ('Claims Summary', 'claims_summary'),
+            ('Claims', 'claims_summary')
+        ]
+
+        # Show these fields only if not Unknown
+        optional_fields = [
+            ('Notables', 'notables'),
             ('Participant Measures', 'participant_measures'),
             ('Police Measures', 'police_measures'),
             ('Participant Injuries', 'participant_injuries'),
@@ -1154,20 +1262,29 @@ def update_event_details(click_data, filtered_data):
         details = []
         for _, event in location_events.iterrows():
             event_detail = []
-            for label, col in detail_fields:
+
+            # Always show these fields
+            for label, col in always_fields:
                 value = event.get(col, 'Unknown')
                 if pd.isnull(value) or (isinstance(value, str) and (not value.strip() or value.strip().lower() == 'nan')):
                     value = 'Unknown'
-                if col == 'date' and pd.notnull(value):
+                if col == 'date' and pd.notnull(value) and value != 'Unknown':
                     try:
                         value = pd.to_datetime(value).strftime('%Y-%m-%d')
                     except Exception:
                         value = 'Unknown'
                 event_detail.append(html.P(f"{label}: {value}", style={'margin': '0 0 4px 0'}))
 
+            # Only show optional fields if not Unknown
+            for label, col in optional_fields:
+                value = event.get(col, 'Unknown')
+                if pd.isnull(value) or (isinstance(value, str) and (not value.strip() or value.strip().lower() == 'nan')):
+                    continue  # Skip if Unknown
+                event_detail.append(html.P(f"{label}: {value}", style={'margin': '0 0 4px 0'}))
+
             title = event.get('title', 'Unknown')
             date = event.get('date', 'Unknown')
-            if pd.notnull(date):
+            if pd.notnull(date) and date != 'Unknown':
                 try:
                     date = pd.to_datetime(date).strftime('%Y-%m-%d')
                 except Exception:
@@ -1242,6 +1359,24 @@ def toggle_sidebar_content(n_clicks):
     else:
         return filter_panel, "Show Data Definitions & Sources"
 
+
+@app.callback(
+    Output('city-filter', 'options'),
+    Output('city-filter', 'value'),
+    Input('state-filter', 'value'),
+    State('city-filter', 'value')
+)
+def update_city_options(selected_states, selected_cities):
+    if not selected_states:
+        # No state selected: clear city options and selection
+        return [], []
+    # Filter df for selected states and get unique cities
+    filtered = df[df['state'].isin(selected_states)]
+    cities = sorted(filtered['resolved_locality'].dropna().unique())
+    options = [{'label': c, 'value': c} for c in cities]
+    # Remove any selected cities that are not in the new options
+    new_selected = [c for c in (selected_cities or []) if c in cities]
+    return options, new_selected
 
 # Uncomment the following 2 lines to run the app directly and test locally. Comment back out when deploying to production.
 if __name__ == '__main__':
