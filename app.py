@@ -940,7 +940,7 @@ def update_all(
         html.Div([
             html.Div(f"{percent_no_size:.1f}%", style={'fontSize': '1.35rem', 'fontWeight': '700'}),
             html.Div("🔍", style={'fontSize': '1.2rem', 'margin': '0'}),
-            html.Div("Events Missing Size", style={'fontSize': '0.85rem', 'margin': '0'})
+            html.Div("Events Missing Participant Count", style={'fontSize': '0.85rem', 'margin': '0'})
         ], style={'marginBottom': '0'})
     ]
     no_injuries_kpi = [
@@ -1010,7 +1010,7 @@ def update_all(
             dash_kpi("Average Participant Count", "📊"),
             dash_kpi("Largest Day", "🥇"),
             dash_kpi("Total Participants", "🌟"),
-            dash_kpi("Events Missing Size", "🔍"),
+            dash_kpi("Events Missing Participant Count", "🔍"),
             dash_kpi("% with No Injuries", "🚑"),
             dash_kpi("% with No Arrests", "🚔"),
             dash_kpi("% with No Property Damage", "🏚️"),
@@ -1379,5 +1379,5 @@ def update_city_options(selected_states, selected_cities):
     return options, new_selected
 
 # Uncomment the following 2 lines to run the app directly and test locally. Comment back out when deploying to production.
-# if __name__ == '__main__':
-#     app.run(debug=True)
+if __name__ == '__main__':
+    app.run(debug=True)
