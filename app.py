@@ -1157,7 +1157,17 @@ def update_all(
 
     fig_momentum = go.Figure()
     fig_momentum.add_trace(go.Scatter(
-        x=dff_momentum['date'], y=dff_momentum['momentum'], mode='lines', name='Momentum (7-Day Sum)'
+        x=dff_momentum['date'],
+        y=dff_momentum['momentum'],
+        mode='lines',
+        name='Momentum',
+        hovertemplate=(
+            "<b>Momentum of Dissent</b>: %{y:,.0f}<br>"
+            "Date: %{x|%Y-%m-%d}<br>"
+            "<span style='font-size:0.95em;'>"
+            "Momentum of Dissent = (participants on a given day) × (number of events in the 7 days prior)"
+            "</span><extra></extra>"
+        )
     ))
     # Add trendline (linear regression) to the 7-day momentum
     valid = dff_momentum['momentum'].notna()
@@ -1170,7 +1180,7 @@ def update_all(
             x=dff_momentum.loc[valid, 'date'],
             y=p(pd.to_numeric(dff_momentum.loc[valid, 'date'])),
             mode='lines',
-            name='Trendline',
+            name='Trendline of Momentum',
             line=dict(dash='dash', color='gray')
         ))
     fig_momentum.update_layout(height=270, margin=standard_margin)
@@ -1265,6 +1275,9 @@ def update_event_details(click_data, filtered_data):
             ('Title', 'title'),
             ('Date', 'date'),
             ('Location', 'location'),
+            ('City', 'resolved_locality'),
+            ('State', 'resolved_state'),
+            ('County', 'resolved_county'),
             ('Organizations', 'organizations'),
             ('Participants', 'size_mean'),
             ('Targets', 'targets'),
@@ -1403,5 +1416,5 @@ def update_city_options(selected_states, selected_cities):
     return options, new_selected
 
 # Uncomment the following 2 lines to run the app directly and test locally. Comment back out when deploying to production.
-# if __name__ == '__main__':
-#     app.run(debug=True)
+if __name__ == '__main__':
+    app.run(debug=True)
