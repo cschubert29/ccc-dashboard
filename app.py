@@ -958,21 +958,16 @@ def filter_data(
 def aggregate_events_for_map(dff_map):
     df_map = dff_map
 
-    # Helper function to determine the best location label
-    def best_location(row):
-        loc = str(row.get('location', 'Unknown')).strip()
-        if loc and loc.lower() != 'nan':
-            return loc
-        loc2 = str(row.get('locality', 'Unknown')).strip()
-        if loc2 and loc2.lower() != 'nan':
-            return loc2
-        state = row.get('state', 'Unknown')
-        date = row['date'].date() if pd.notnull(row.get('date')) else 'Unknown'
-        return f"{state}, {date}"
-
-    # Precompute location_label and event_label only once after loading for speed
+    # SPEEDUP: Vectorized best_location
+    loc = df_map['location'].astype(str).str.strip() if 'location' in df_map.columns else pd.Series(['Unknown']*len(df_map), index=df_map.index)
+    loc2 = df_map['locality'].astype(str).str.strip() if 'locality' in df_map.columns else pd.Series(['Unknown']*len(df_map), index=df_map.index)
+    state = df_map['state'].astype(str) if 'state' in df_map.columns else pd.Series(['Unknown']*len(df_map), index=df_map.index)
+    date = df_map['date'].dt.date.astype(str) if 'date' in df_map.columns else pd.Series(['Unknown']*len(df_map), index=df_map.index)
+    location_label = np.where((loc != '') & (loc.str.lower() != 'nan'), loc,
+                        np.where((loc2 != '') & (loc2.str.lower() != 'nan'), loc2,
+                        state + ', ' + date))
     if 'location_label' not in df_map.columns:
-        df_map['location_label'] = df_map.apply(best_location, axis=1)
+        df_map['location_label'] = location_label
         df_map['location_label'] = df_map['location_label'].replace('', 'Unknown').fillna('Unknown')
     if 'event_label' not in df_map.columns:
         df_map['event_label'] = df_map.apply(
@@ -1251,56 +1246,51 @@ def update_all(
                 )
             )
 
-            # Graphs
+            # Optimized Momentum Graph
             dff_momentum = dff[['date', 'participants_numeric']].dropna()
-            dff_momentum = dff_momentum.set_index('date').resample('D').agg(['sum', 'count'])
-            dff_momentum.columns = ['sum', 'count']
-            dff_momentum['momentum'] = (dff_momentum['sum'] * dff_momentum['count']).rolling(7).sum()
-            dff_momentum = dff_momentum.reset_index()
-
-            fig_momentum = go.Figure()
-            fig_momentum.add_trace(go.Scatter(
-                x=dff_momentum['date'],
-                y=dff_momentum['momentum'],
-                mode='lines',
-                name='Momentum',
-                hovertemplate=(
-                    "<b>Momentum of Dissent</b>: %{y:,.0f}<br>"
-                    "Date: %{x|%Y-%m-%d}<br>"
-                    "<span style='font-size:0.95em;'>"
-                    "Momentum of Dissent = (participants on a given day) × (number of events in the 7 days prior)"
-                    "</span><extra></extra>"
-                )
-            ))
-            valid = dff_momentum['momentum'].notna()
-            if valid.sum() > 1:
-                z = np.polyfit(
-                    pd.to_numeric(dff_momentum.loc[valid, 'date']), dff_momentum.loc[valid, 'momentum'], 1
-                )
-                p = np.poly1d(z)
+            if not dff_momentum.empty:
+                # Use groupby and transform for vectorized rolling
+                dff_momentum = dff_momentum.groupby('date').agg(sum=('participants_numeric', 'sum'), count=('participants_numeric', 'size'))
+                dff_momentum['momentum'] = (dff_momentum['sum'] * dff_momentum['count']).rolling(7, min_periods=1).sum()
+                dff_momentum.reset_index(inplace=True)
+                fig_momentum = go.Figure()
                 fig_momentum.add_trace(go.Scatter(
                     x=dff_momentum['date'],
-                    y=p(pd.to_numeric(dff_momentum['date'])),
+                    y=dff_momentum['momentum'],
                     mode='lines',
-                    line=dict(dash='dash', color='gray'),
-                    name='Trendline',
-                    hoverinfo='skip'
+                    name='Momentum',
+                    hovertemplate=(
+                        "<b>Momentum of Dissent</b>: %{y:,.0f}<br>"
+                        "Date: %{x|%Y-%m-%d}<br>"
+                        "<span style='font-size:0.95em;'>"
+                        "Momentum of Dissent = (participants on a given day) × (number of events in the 7 days prior)"
+                        "</span><extra></extra>"
+                    )
                 ))
-            fig_momentum.update_layout(
-                margin=standard_margin,
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=1.18,
-                    xanchor="center",
-                    x=0.5,
-                    font=dict(size=12)
-                )
-            )
+                valid = dff_momentum['momentum'].notna()
+                if valid.sum() > 1:
+                    # Use ordinal encoding for dates for polyfit
+                    xvals = pd.to_datetime(dff_momentum.loc[valid, 'date']).map(pd.Timestamp.toordinal)
+                    yvals = dff_momentum.loc[valid, 'momentum']
+                    z = np.polyfit(xvals, yvals, 1)
+                    p = np.poly1d(z)
+                    fig_momentum.add_trace(go.Scatter(
+                        x=dff_momentum['date'],
+                        y=p(pd.to_datetime(dff_momentum['date']).map(pd.Timestamp.toordinal)),
+                        mode='lines',
+                        line=dict(dash='dash', color='gray'),
+                        name='Trendline',
+                        hoverinfo='skip'
+                    ))
+                fig_momentum.update_layout(height=270, margin=standard_margin)
+            else:
+                fig_momentum = go.Figure()
+                fig_momentum.add_annotation(text="No data", xref="paper", yref="paper", x=0.5, y=0.5, showarrow=False)
+                fig_momentum.update_layout(height=270, margin=standard_margin)
 
             dff_daily = dff.set_index('date').resample('D').size().reset_index(name='count')
             fig_daily = px.bar(dff_daily, x='date', y='count', height=270, template="plotly_white")
-            fig_daily.update_layout(margin={**standard_margin, 'b': 50})
+            fig_daily.update_layout(margin={**standard_margin, 'b': 50}, barmode='group')
 
             dff_cum = dff.set_index('date').resample('D').size().reset_index(name='count')
             dff_cum['cumulative'] = dff_cum['count'].cumsum()
@@ -1371,18 +1361,15 @@ def update_all(
         dff_for_store = dff_jittered[table_columns].copy()
 
         # Reuse the same location label logic from aggregate_events_for_map
-        def best_location(row):
-            loc = str(row.get('location', 'Unknown')).strip()
-            if loc and loc.lower() != 'nan':
-                return loc
-            loc2 = str(row.get('locality', 'Unknown')).strip()
-            if loc2 and loc2.lower() != 'nan':
-                return loc2
-            state = row.get('state', 'Unknown')
-            date = row['date'].date() if pd.notnull(row.get('date')) else 'Unknown'
-            return f"{state}, {date}"
-
-        dff_jittered['location_label'] = dff_jittered.apply(best_location, axis=1)
+        # SPEEDUP: Vectorized best_location
+        loc = dff_jittered['location'].astype(str).str.strip() if 'location' in dff_jittered.columns else pd.Series(['Unknown']*len(dff_jittered), index=dff_jittered.index)
+        loc2 = dff_jittered['locality'].astype(str).str.strip() if 'locality' in dff_jittered.columns else pd.Series(['Unknown']*len(dff_jittered), index=dff_jittered.index)
+        state = dff_jittered['state'].astype(str) if 'state' in dff_jittered.columns else pd.Series(['Unknown']*len(dff_jittered), index=dff_jittered.index)
+        date = dff_jittered['date'].dt.date.astype(str) if 'date' in dff_jittered.columns else pd.Series(['Unknown']*len(dff_jittered), index=dff_jittered.index)
+        location_label = np.where((loc != '') & (loc.str.lower() != 'nan'), loc,
+                            np.where((loc2 != '') & (loc2.str.lower() != 'nan'), loc2,
+                            state + ', ' + date))
+        dff_jittered['location_label'] = location_label
         dff_jittered['location_label'] = dff_jittered['location_label'].replace('', 'Unknown').fillna('Unknown')
         agg_map = aggregate_events_for_map(dff_jittered)
 
@@ -1541,7 +1528,7 @@ def update_all(
         # Daily event count graph
         dff_daily = dff.set_index('date').resample('D').size().reset_index(name='count')
         fig_daily = px.bar(dff_daily, x='date', y='count', height=270, template="plotly_white")
-        fig_daily.update_layout(margin={**standard_margin, 'b': 50})
+        fig_daily.update_layout(margin={**standard_margin, 'b': 50}, barmode='group')
 
         # Cumulative total events graph (correct: cumulative count of events per day)
         dff_cum = dff.set_index('date').resample('D').size().reset_index(name='count')
@@ -1629,9 +1616,22 @@ def update_all(
             html.Div(f"{int(round(largest_event_val)):,} participants" if not np.isnan(largest_event_val) else "-", style=kpi_number_font),
         ], style={'textAlign': 'center', 'padding': '7px', 'borderRadius': '10px', 'backgroundColor': PRIMARY_RED, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 3px'})
 
-        # 8. Largest Day of Action (NumPy for speed)
-        # Use pandas groupby for sum, then np.nanmax
-        largest_day_total = np.nanmax(dff.groupby('date')['size_mean'].sum().to_numpy()) if not dff.empty else float('nan')
+
+        # --- Optimized 3.5% Threshold and Largest Day Calculation ---
+        # Group by date and sum size_mean only once
+        # --- Optimized 3.5% Threshold and Related KPIs ---
+        # Calculate daily participant sums ONCE and reuse
+        if not dff.empty and 'date' in dff.columns and 'size_mean' in dff.columns:
+            daily_participant_sums = dff.groupby('date', sort=False)['size_mean'].sum()
+            daily_participant_arr = daily_participant_sums.values
+            if daily_participant_arr.size > 0:
+                largest_day_total = np.nanmax(daily_participant_arr)
+            else:
+                largest_day_total = float('nan')
+        else:
+            largest_day_total = float('nan')
+            daily_participant_arr = np.array([])
+
         largest_day_kpi = html.Div([
             html.Div("Largest Day of Action", style={'fontSize': '0.85rem', 'marginBottom': '4px'}),
             html.Div("📅", style={'fontSize': '1.2rem', 'marginTop': '4px'}),
@@ -1657,7 +1657,10 @@ def update_all(
             else:
                 pop_denom = US_POPULATION
                 pop_label = "US population"
-        percent_val = (largest_day_total / pop_denom * 100) if (pop_denom > 0 and largest_day_total and not np.isnan(largest_day_total)) else 0.0
+        if pop_denom > 0 and largest_day_total and not np.isnan(largest_day_total):
+            percent_val = (largest_day_total / pop_denom * 100)
+        else:
+            percent_val = 0.0
         percent_label = f"{percent_val:.2f}% of {pop_label}"
         percent_us_pop_kpi = html.Div([
             html.Div("Largest Day of Action (%)", style={'fontSize': '0.85rem', 'marginBottom': '4px'}),
@@ -1665,11 +1668,8 @@ def update_all(
             html.Div(percent_label, style=kpi_number_font),
         ], style={'textAlign': 'center', 'padding': '7px', 'borderRadius': '10px', 'backgroundColor': PRIMARY_BLUE, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 3px'})
 
-
         # 3.5% of US population (or selected states)
         three_point_five_threshold = pop_denom * 0.035
-        # Find the largest day total (already calculated as largest_day_total)
-        # Check if any day meets or exceeds the threshold
         met_threshold = bool(largest_day_total and not np.isnan(largest_day_total) and largest_day_total >= three_point_five_threshold)
         three_point_five_result = {
             'threshold': int(round(three_point_five_threshold)),
