@@ -1054,14 +1054,20 @@ def update_all(
             city_filter, any_outcomes_filter, national_day_value
         )
 
+
         # Defensive: Ensure required columns exist before KPI calculations
         required_cols = [
             'lat', 'lon', 'participant_injuries', 'arrests', 'property_damage_any',
             'participants_numeric', 'size_mean', 'date'
         ]
-        for col in required_cols:
-            if col not in dff.columns:
-                raise ValueError(f"Missing required column: {col}")
+        missing_cols = [col for col in required_cols if col not in dff.columns]
+        if missing_cols:
+            raise ValueError(f"Missing required columns: {missing_cols}")
+
+        # --- SPEEDUP: Limit columns in dcc.Store (filtered-data) ---
+        # All columns except source_2 to source_30, keep only source_1
+        table_columns = [col for col in dff.columns if not (col.startswith('source_') and col != 'source_1')]
+        dff_for_store = dff[table_columns].copy()
 
         # Defensive: Ensure 'lat' and 'lon' columns are not all missing
         if dff['lat'].isnull().all() or dff['lon'].isnull().all():
@@ -1082,11 +1088,12 @@ def update_all(
                 showlegend=False
             )
             empty_json = pd.DataFrame().to_json(date_format='iso', orient='split')
-            dash_kpi = lambda label, icon="—": html.Div([
-                html.Div("-", style={'fontSize': '1.35rem', 'fontWeight': '700'}),
-                html.Div(icon, style={'fontSize': '1.2rem', 'margin': '0'}),
-                html.Div(label, style={'fontSize': '0.85rem', 'margin': '0'})
-            ], style={'marginBottom': '0'})
+            def dash_kpi(label, icon="—"):
+                return html.Div([
+                    html.Div("-", style={'fontSize': '1.35rem', 'fontWeight': '700'}),
+                    html.Div(icon, style={'fontSize': '1.2rem', 'margin': '0'}),
+                    html.Div(label, style={'fontSize': '0.85rem', 'margin': '0'})
+                ], style={'marginBottom': '0'})
             return (
                 empty_fig,  # map-graph
                 empty_fig,  # momentum-graph
@@ -1123,6 +1130,9 @@ def update_all(
             dff_jittered = jitter_coords(dff, lat_col='lat', lon_col='lon', jitter_amount=0.01)
             if 'size_mean' in dff.columns and 'size_mean' not in dff_jittered.columns:
                 dff_jittered['size_mean'] = dff['size_mean']
+            # Limit columns for dcc.Store
+            table_columns = [col for col in dff_jittered.columns if not (col.startswith('source_') and col != 'source_1')]
+            dff_for_store = dff_jittered[table_columns].copy()
 
             def best_location(row):
                 loc = str(row.get('location', 'Unknown')).strip()
@@ -1334,7 +1344,7 @@ def update_all(
                 fig_map,  # map-graph
                 dash_figure(),  # momentum-graph (shows dash)
                 fig_daily,  # daily-graph
-                dff_jittered.to_json(date_format='iso', orient='split'),  # filtered-data
+                dff_for_store.to_json(date_format='iso', orient='split'),  # filtered-data (LIMITED COLUMNS)
                 fig_cumulative,  # cumulative-graph
                 dash_figure(),  # daily-participant-graph (shows dash)
                 total_events_kpi,  # total-events-kpi
@@ -1352,6 +1362,9 @@ def update_all(
         dff_jittered = jitter_coords(dff, lat_col='lat', lon_col='lon', jitter_amount=0.01)
         if 'size_mean' in dff.columns and 'size_mean' not in dff_jittered.columns:
             dff_jittered['size_mean'] = dff['size_mean']
+        # Limit columns for dcc.Store
+        table_columns = [col for col in dff_jittered.columns if not (col.startswith('source_') and col != 'source_1')]
+        dff_for_store = dff_jittered[table_columns].copy()
 
         # Reuse the same location label logic from aggregate_events_for_map
         def best_location(row):
@@ -1558,55 +1571,63 @@ def update_all(
             html.Div(f"{len(dff):,}", style=kpi_number_font),
         ], style={'textAlign': 'center', 'padding': '7px', 'borderRadius': '10px', 'backgroundColor': PRIMARY_BLUE, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 3px'})
 
-        # 2. Average Participants per Event
+
+        # 2. Average Participants per Event (NumPy for speed)
+        size_mean_arr = dff['size_mean'].to_numpy()
+        mean_size_val = np.nanmean(size_mean_arr) if size_mean_arr.size > 0 else 0.0
         mean_size_kpi = html.Div([
             html.Div("Average Participants per Event", style={'fontSize': '0.85rem', 'marginBottom': '4px'}),
             html.Div("📊", style={'fontSize': '1.2rem', 'marginTop': '4px'}),
-            html.Div(f"{dff['size_mean'].mean():,.0f}", style=kpi_number_font),
+            html.Div(f"{mean_size_val:,.0f}", style=kpi_number_font),
         ], style={'textAlign': 'center', 'padding': '7px', 'borderRadius': '10px', 'backgroundColor': PRIMARY_RED, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 3px'})
 
-        # 3. Events with No Injuries
-        no_injuries_pct = ((dff['participant_injuries'].isna() | (dff['participant_injuries'] == 0)).sum() / len(dff) * 100) if len(dff) > 0 else 0.0
+        # 3. Events with No Injuries (NumPy for speed)
+        injuries_arr = dff['participant_injuries'].to_numpy()
+        no_injuries_pct = (np.count_nonzero((np.isnan(injuries_arr)) | (injuries_arr == 0)) / len(injuries_arr) * 100) if len(injuries_arr) > 0 else 0.0
         no_injuries_kpi = html.Div([
             html.Div("Events with No Injuries", style={'fontSize': '0.85rem', 'marginBottom': '4px'}),
             html.Div("🚑", style={'fontSize': '1.2rem', 'marginTop': '4px'}),
             html.Div(f"{no_injuries_pct:.2f}%", style=kpi_number_font),
         ], style={'textAlign': 'center', 'padding': '7px', 'borderRadius': '10px', 'backgroundColor': PRIMARY_BLUE, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 3px'})
 
-        # 4. Events with No Arrests
-        no_arrests_pct = ((dff['arrests'].isna() | (dff['arrests'] == 0)).sum() / len(dff) * 100) if len(dff) > 0 else 0.0
+        # 4. Events with No Arrests (NumPy for speed)
+        arrests_arr = dff['arrests'].to_numpy()
+        no_arrests_pct = (np.count_nonzero((np.isnan(arrests_arr)) | (arrests_arr == 0)) / len(arrests_arr) * 100) if len(arrests_arr) > 0 else 0.0
         no_arrests_kpi = html.Div([
             html.Div("Events with No Arrests", style={'fontSize': '0.85rem', 'marginBottom': '4px'}),
             html.Div("🚔", style={'fontSize': '1.2rem', 'marginTop': '4px'}),
             html.Div(f"{no_arrests_pct:.2f}%", style=kpi_number_font),
         ], style={'textAlign': 'center', 'padding': '7px', 'borderRadius': '10px', 'backgroundColor': PRIMARY_RED, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 3px', 'border': 'none'})
 
-        # 5. Events with No Property Damage
-        no_damage_pct = (len(dff[dff['property_damage_any'] == 0]) / len(dff) * 100) if len(dff) > 0 else 0.0
+        # 5. Events with No Property Damage (NumPy for speed)
+        prop_damage_arr = dff['property_damage_any'].to_numpy()
+        no_damage_pct = (np.count_nonzero(prop_damage_arr == 0) / len(prop_damage_arr) * 100) if len(prop_damage_arr) > 0 else 0.0
         no_damage_kpi = html.Div([
             html.Div("Events with No Property Damage", style={'fontSize': '0.85rem', 'marginBottom': '4px'}),
             html.Div("🏚️", style={'fontSize': '1.2rem', 'marginTop': '4px'}),
             html.Div(f"{no_damage_pct:.2f}%", style=kpi_number_font),
         ], style={'textAlign': 'center', 'padding': '7px', 'borderRadius': '10px', 'backgroundColor': PRIMARY_BLUE, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 3px'})
 
-        # 6. Total Participants
-        total_participants_val = int(round(dff['participants_numeric'].sum())) if not np.isnan(dff['participants_numeric'].sum()) else 0
+        # 6. Total Participants (NumPy for speed)
+        participants_arr = dff['participants_numeric'].to_numpy()
+        total_participants_val = int(round(np.nansum(participants_arr))) if participants_arr.size > 0 else 0
         total_participants_kpi = html.Div([
             html.Div("Total Participants", style={'fontSize': '0.85rem', 'marginBottom': '4px'}),
             html.Div("🌟", style={'fontSize': '1.2rem', 'marginTop': '4px'}),
             html.Div(f"{total_participants_val:,}", style=kpi_number_font),
         ], style={'textAlign': 'center', 'padding': '7px', 'borderRadius': '10px', 'backgroundColor': PRIMARY_BLUE, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 3px'})
 
-        # 7. Largest Single Event
-        largest_event_val = dff['size_mean'].max()
+        # 7. Largest Single Event (NumPy for speed)
+        largest_event_val = np.nanmax(size_mean_arr) if size_mean_arr.size > 0 else float('nan')
         largest_event_kpi = html.Div([
             html.Div("Largest Single Event", style={'fontSize': '0.85rem', 'marginBottom': '4px'}),
             html.Div("🥇", style={'fontSize': '1.2rem', 'marginTop': '4px'}),
             html.Div(f"{int(round(largest_event_val)):,} participants" if not np.isnan(largest_event_val) else "-", style=kpi_number_font),
         ], style={'textAlign': 'center', 'padding': '7px', 'borderRadius': '10px', 'backgroundColor': PRIMARY_RED, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 3px'})
 
-        # 8. Largest Day of Action
-        largest_day_total = dff.groupby('date')['size_mean'].sum().max()
+        # 8. Largest Day of Action (NumPy for speed)
+        # Use pandas groupby for sum, then np.nanmax
+        largest_day_total = np.nanmax(dff.groupby('date')['size_mean'].sum().to_numpy()) if not dff.empty else float('nan')
         largest_day_kpi = html.Div([
             html.Div("Largest Day of Action", style={'fontSize': '0.85rem', 'marginBottom': '4px'}),
             html.Div("📅", style={'fontSize': '1.2rem', 'marginTop': '4px'}),
@@ -1646,7 +1667,7 @@ def update_all(
             fig_map,  # map-graph
             fig_momentum,  # momentum-graph
             fig_daily,  # daily-graph
-            dff_jittered.to_json(date_format='iso', orient='split'),  # filtered-data
+            dff_for_store.to_json(date_format='iso', orient='split'),  # filtered-data (LIMITED COLUMNS)
             fig_cumulative,  # cumulative-graph
             fig_daily_participant,  # daily-participant-graph
             total_events_kpi,  # total-events-kpi
@@ -1814,11 +1835,58 @@ def update_event_details(click_data, filtered_data):
         )
 
     
+
+# --- SPEEDUP & UX: Clean up sources, prettify column names for DataTable ---
 @app.callback(
     [Output('filtered-table', 'data'),
      Output('filtered-table', 'columns')],
     Input('filtered-data', 'data')
 )
+def update_filtered_table(filtered_data):
+    import pandas as pd
+    import numpy as np
+    import re
+    if not filtered_data:
+        return [], []
+    dff = pd.read_json(filtered_data, orient='split')
+    if dff.empty:
+        return [], []
+
+    # Remove source columns (source_1, source_2, ...) that are all empty/blank/NaN
+    source_cols = [col for col in dff.columns if col.startswith('source_')]
+    nonempty_sources = []
+    for col in source_cols:
+        # Keep if at least one non-empty, non-NaN, non-blank value
+        if dff[col].replace('', np.nan).notna().any():
+            nonempty_sources.append(col)
+    # Remove empty source columns
+    keep_cols = [col for col in dff.columns if not col.startswith('source_') or col in nonempty_sources]
+    dff = dff[keep_cols]
+
+    # Prettify column names for display
+    def prettify(col):
+        if col.startswith('source_'):
+            return 'Source'
+        col2 = col.replace('_', ' ').title()
+        # Custom prettifications
+        col2 = col2.replace('Us', 'US').replace('Id', 'ID').replace('Url', 'URL')
+        col2 = col2.replace('Lat', 'Latitude').replace('Lon', 'Longitude')
+        return col2
+
+    columns = []
+    for col in dff.columns:
+        # If multiple source columns remain, append number for clarity
+        if col.startswith('source_') and len(nonempty_sources) > 1:
+            label = f"Source {col.split('_')[1]}"
+        elif col.startswith('source_'):
+            label = 'Source'
+        else:
+            label = prettify(col)
+        columns.append({'name': label, 'id': col})
+
+    # Replace NaN with blank for display
+    data = dff.replace({np.nan: ''}).to_dict('records')
+    return data, columns
 def update_table(data_json):
     if not data_json:
         return [], []
