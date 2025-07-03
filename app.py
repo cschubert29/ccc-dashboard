@@ -8,6 +8,7 @@ import os
 import random
 import re
 import io
+from io import StringIO
 import time
 import datetime
 import traceback
@@ -27,11 +28,10 @@ else:
     df['date'] = pd.to_datetime(df['date'], errors='coerce')
     df['size_mean'] = pd.to_numeric(df['size_mean'], errors='coerce')
     df['participants_numeric'] = df['size_mean']
-    df['targets'] = df['targets'].astype(str).str.lower()
-    df['organizations'] = df['organizations'].astype(str).str.lower()
+    # Optimize: Convert string columns used in filters to category dtype for speed/memory
+    df['targets'] = df['targets'].astype(str).str.lower().astype('category')
+    df['organizations'] = df['organizations'].astype(str).str.lower().astype('category')
     df['state'] = df['state'].astype('category')
-    df['targets'] = df['targets'].astype('category')
-    df['organizations'] = df['organizations'].astype('category')
     if 'trump_stance' in df.columns:
         df['trump_stance'] = df['trump_stance'].astype(str).str.lower()
 
@@ -91,13 +91,13 @@ filter_panel = html.Div([
         style={
             'marginBottom': '4px',
             'width': '100%',
-            'zIndex': 1200,  # ensure popup is above sidebar
+            'zIndex': 1200,
             'position': 'relative',
             'overflow': 'visible',
         },
-        calendar_orientation='vertical',  # force vertical calendar popup
-        day_size=32,  # slightly smaller day cells
-        with_portal=True,  # force calendar popup to overlay, not inline
+        calendar_orientation='vertical',
+        day_size=32,
+        with_portal=True,
     ),
      dcc.Dropdown(
         id='national-days-dropdown',
@@ -430,6 +430,7 @@ app.layout = html.Div([
     dcc.Store(id='filtered-data'),
     dcc.Store(id='sidebar-open', data=True),
     dcc.Store(id='show-missing-link-store', data=0),
+    dcc.Store(id='three-point-five-check'),
     html.Div(id='sidebar-dynamic', children=get_sidebar(is_open=True)),
     html.Div(id='main-content', children=[
     html.Div(
@@ -969,20 +970,20 @@ def aggregate_events_for_map(dff_map):
         date = row['date'].date() if pd.notnull(row.get('date')) else 'Unknown'
         return f"{state}, {date}"
 
-    # Apply the best location logic
-    df_map['location_label'] = df_map.apply(best_location, axis=1)
-    df_map['location_label'] = df_map['location_label'].replace('', 'Unknown').fillna('Unknown')
-
-    # Create event labels for hover text
-    df_map['event_label'] = df_map.apply(
-        lambda row: (
-            f"<b>{row.get('title', 'Unknown')}</b><br>"
-            f"Date: {row['date'].date() if pd.notnull(row['date']) else 'Unknown'}<br>"
-            f"Organizations: {row.get('organizations', 'Unknown')}<br>"
-            f"Participants: {row.get('size_mean', 'Unknown')}"
-        ),
-        axis=1
-    )
+    # Precompute location_label and event_label only once after loading for speed
+    if 'location_label' not in df_map.columns:
+        df_map['location_label'] = df_map.apply(best_location, axis=1)
+        df_map['location_label'] = df_map['location_label'].replace('', 'Unknown').fillna('Unknown')
+    if 'event_label' not in df_map.columns:
+        df_map['event_label'] = df_map.apply(
+            lambda row: (
+                f"<b>{row.get('title', 'Unknown')}</b><br>"
+                f"Date: {row['date'].date() if pd.notnull(row['date']) else 'Unknown'}<br>"
+                f"Organizations: {row.get('organizations', 'Unknown')}<br>"
+                f"Participants: {row.get('size_mean', 'Unknown')}"
+            ),
+            axis=1
+        )
 
     # Drop rows without valid latitude and longitude
     df_map = df_map.dropna(subset=['lat', 'lon'])
@@ -1030,6 +1031,7 @@ def aggregate_events_for_map(dff_map):
     Output('largest-event-kpi', 'children'),
     Output('largest-day-kpi', 'children'),
     Output('percent-us-pop-kpi', 'children'),
+    Output('three-point-five-check', 'data'),  # New output for 3.5% check
     [
         Input('date-range', 'start_date'),
         Input('date-range', 'end_date'),
@@ -1064,7 +1066,7 @@ def update_all(
         if missing_cols:
             raise ValueError(f"Missing required columns: {missing_cols}")
 
-        # --- SPEEDUP: Limit columns in dcc.Store (filtered-data) ---
+        # SPEEDUP: Limit columns in dcc.Store (filtered-data) 
         # All columns except source_2 to source_30, keep only source_1
         table_columns = [col for col in dff.columns if not (col.startswith('source_') and col != 'source_1')]
         dff_for_store = dff[table_columns].copy()
@@ -1340,7 +1342,7 @@ def update_all(
                 )
                 return fig
 
-            return (
+            outputs = [
                 fig_map,  # map-graph
                 dash_figure(),  # momentum-graph (shows dash)
                 fig_daily,  # daily-graph
@@ -1355,8 +1357,10 @@ def update_all(
                 dash_kpi("Total Participants", "🌟"),
                 dash_kpi("Largest Single Event", "🥇"),
                 dash_kpi("Largest Day of Action", "📅"),
-                dash_kpi("Largest Day of Action (%)", "🌎")
-            )
+                dash_kpi("Largest Day of Action (%)", "🌎"),
+                None  # three-point-five-check (empty)
+            ]
+            return outputs
 
         # Jitter coordinates for map visualization
         dff_jittered = jitter_coords(dff, lat_col='lat', lon_col='lon', jitter_amount=0.01)
@@ -1477,7 +1481,7 @@ def update_all(
             legend=dict(
                 orientation="h",
                 yanchor="bottom",
-                y=-0.08,  # decrease space above legend (closer to bottom)
+                y=-0.08,
                 xanchor="center",
                 x=0.5,
                 font=dict(size=12)
@@ -1661,9 +1665,24 @@ def update_all(
             html.Div(percent_label, style=kpi_number_font),
         ], style={'textAlign': 'center', 'padding': '7px', 'borderRadius': '10px', 'backgroundColor': PRIMARY_BLUE, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 3px'})
 
+
+        # 3.5% of US population (or selected states)
+        three_point_five_threshold = pop_denom * 0.035
+        # Find the largest day total (already calculated as largest_day_total)
+        # Check if any day meets or exceeds the threshold
+        met_threshold = bool(largest_day_total and not np.isnan(largest_day_total) and largest_day_total >= three_point_five_threshold)
+        three_point_five_result = {
+            'threshold': int(round(three_point_five_threshold)),
+            'largest_day_total': int(round(largest_day_total)) if not np.isnan(largest_day_total) else 0,
+            'met': met_threshold,
+            'percent': percent_val,
+            'population': int(pop_denom),
+            'label': pop_label
+        }
+
         # Return the calculated outputs
         # Return only unique KPIs in the correct order
-        return (
+        return [
             fig_map,  # map-graph
             fig_momentum,  # momentum-graph
             fig_daily,  # daily-graph
@@ -1678,8 +1697,9 @@ def update_all(
             total_participants_kpi,  # total-participants-kpi
             largest_event_kpi,  # largest-event-kpi
             largest_day_kpi,  # largest-day-kpi
-            percent_us_pop_kpi  # percent-us-pop-kpi
-        )
+            percent_us_pop_kpi,  # percent-us-pop-kpi
+            three_point_five_result  # three-point-five-check
+        ]
 
     except Exception as e:
         print("Exception in update_all callback:", e)
@@ -1707,7 +1727,7 @@ def update_all(
             html.Div(label, style={'fontSize': '0.85rem', 'margin': '0'})
         ], style={'marginBottom': '0'})
         # Use the same unique KPIs and labels as in the main output
-        return (
+        return [
             empty_fig,  # map-graph
             empty_fig,  # momentum-graph
             empty_fig,  # daily-graph
@@ -1722,8 +1742,9 @@ def update_all(
             dash_kpi("Total Participants", "🌟"),
             dash_kpi("Largest Single Event", "🥇"),
             dash_kpi("Largest Day of Action", "📅"),
-            dash_kpi("Largest Day of Action as % of Population", "🌎")
-        )
+            dash_kpi("Largest Day of Action as % of Population", "🌎"),
+            None  # three-point-five-check (empty)
+        ]
 
 @app.callback(
     Output('event-details-panel', 'children'),
@@ -1836,19 +1857,16 @@ def update_event_details(click_data, filtered_data):
 
     
 
-# --- SPEEDUP & UX: Clean up sources, prettify column names for DataTable ---
+# SPEEDUP & UX: Clean up sources, prettify column names for DataTable
 @app.callback(
     [Output('filtered-table', 'data'),
      Output('filtered-table', 'columns')],
     Input('filtered-data', 'data')
 )
 def update_filtered_table(filtered_data):
-    import pandas as pd
-    import numpy as np
-    import re
     if not filtered_data:
         return [], []
-    dff = pd.read_json(filtered_data, orient='split')
+    dff = pd.read_json(StringIO(filtered_data), orient='split')
     if dff.empty:
         return [], []
 
@@ -1901,10 +1919,10 @@ def update_table(data_json):
 
 
 @app.callback(
-    Output("download-data", "data"),  # Use the correct dcc.Download ID
-    Input("download-btn", "n_clicks"),  # Triggered by the download button
-    State("filtered-data", "data"),  # Use the filtered data
-    State("download-choice", "value"),  # Check if the user wants filtered or full data
+    Output("download-data", "data"),
+    Input("download-btn", "n_clicks"),
+    State("filtered-data", "data"),
+    State("download-choice", "value"),
     prevent_initial_call=True
 )
 def download_filtered_table(n_clicks, filtered_data, download_choice):
@@ -1999,6 +2017,7 @@ def update_missing_count_message(
 
    
 
+    # Always show the link button if there are missing counts, and wire up the n_clicks
     if size_filter == "no":
         msg = html.Span([
             "There are ",
@@ -2026,18 +2045,28 @@ def update_missing_count_message(
                 html.Span(f"{missing_total:,}", style={'color': PRIMARY_RED, 'fontWeight': 'bold'}),
                 " additional events are missing participant counts. Participant counts are vital for tracking protest size and progress over time."
             ])
-            style = LINK_BUTTON_STYLE
+            style = LINK_BUTTON_STYLE.copy()
+            style['display'] = 'inline'
     else:  # "all"
-        msg = html.Span([
-            "There are ",
-            html.Span(f"{total_events:,}", style={'color': PRIMARY_BLUE, 'fontWeight': 'bold'}),
-            " events in the database for your filter selections, but ",
-            html.Span(f"{missing_pct:.1f}%", style={'color': PRIMARY_RED, 'fontWeight': 'bold'}),
-            " (",
-            html.Span(f"{missing_count:,}", style={'color': PRIMARY_RED, 'fontWeight': 'bold'}),
-            ") of those are missing vital information needed to track protest size and progress over time."
-        ])
-        style = LINK_BUTTON_STYLE
+        if missing_count > 0:
+            msg = html.Span([
+                "There are ",
+                html.Span(f"{total_events:,}", style={'color': PRIMARY_BLUE, 'fontWeight': 'bold'}),
+                " events in the database for your filter selections, but ",
+                html.Span(f"{missing_pct:.1f}%", style={'color': PRIMARY_RED, 'fontWeight': 'bold'}),
+                " (",
+                html.Span(f"{missing_count:,}", style={'color': PRIMARY_RED, 'fontWeight': 'bold'}),
+                ") of those are missing vital information needed to track protest size and progress over time."
+            ])
+            style = LINK_BUTTON_STYLE.copy()
+            style['display'] = 'inline'
+        else:
+            msg = html.Span([
+                "There are ",
+                html.Span(f"{total_events:,}", style={'color': PRIMARY_BLUE, 'fontWeight': 'bold'}),
+                " events in the database for your filter selections. All have participant counts."
+            ])
+            style = {'display': 'none'}
 
     return msg, style, msg, style, msg, style
 
@@ -2074,35 +2103,26 @@ def handle_show_missing_and_tab(n_map, n_graphs, n_table, tab_value, store_val):
 
 @app.callback(
     Output('threshold-row', 'children'),
-    Input('filtered-data', 'data')
+    Input('three-point-five-check', 'data'),
+    State('filtered-data', 'data')
 )
-def update_threshold_row(filtered_json):
-    if not filtered_json:
+def update_threshold_row(three_point_five_data, filtered_json):
+    if not filtered_json or not three_point_five_data:
         return ""
-
     dff = pd.read_json(io.StringIO(filtered_json), orient='split')
-    if dff.empty or 'date' not in dff.columns or 'size_mean' not in dff.columns:
+    if dff.empty or 'date' not in dff.columns:
         return ""
-
     latest_date = dff['date'].max()
     if pd.isnull(latest_date):
         return ""
-
-    # Calculate cumulative unique participants (sum of size_mean, ignoring missing)
-    total_participants = dff['size_mean'].sum(skipna=True)
-    threshold = 0.035 * US_POPULATION
-    reached = total_participants >= threshold
-
-    # Format date and answer
     date_str = pd.to_datetime(latest_date).strftime('%B %d, %Y')
-    answer = html.Span("Yes", style={'color': 'green', 'fontWeight': 'bold'}) if reached else html.Span("No", style={'color': PRIMARY_RED, 'fontWeight': 'bold'})
-
+    met = three_point_five_data.get('met', False)
+    answer = html.Span("Yes", style={'color': 'green', 'fontWeight': 'bold', 'fontSize': '1.15em', 'margin': '0 8px'}) if met else html.Span("No", style={'color': PRIMARY_RED, 'fontWeight': 'bold', 'fontSize': '1.15em', 'margin': '0 8px'})
     return [
-        html.Span("Have we reached 3.5%?"),
-        html.Span(f"As of {date_str}:"),
-        answer
+        html.Span("3.5% threshold met?", style={'fontWeight': 'bold', 'marginRight': '8px'}),
+        answer,
+        html.Span(f"as of {date_str}", style={'marginLeft': '8px', 'fontSize': '0.97em', 'color': '#888', 'fontStyle': 'italic'})
     ]
-
 
 
 @app.callback(
