@@ -1084,7 +1084,8 @@ def update_all(
                 height=500,
                 showlegend=False
             )
-            empty_json = pd.DataFrame().to_json(date_format='iso', orient='split')
+            # DataTable: always output a list of records, with NaN/None replaced by ""
+            empty_json = []
             def dash_kpi(label, icon="—"):
                 return html.Div([
                     html.Div("-", style={'fontSize': '1.35rem', 'fontWeight': '700'}),
@@ -1095,7 +1096,7 @@ def update_all(
                 empty_fig,  # map-graph
                 empty_fig,  # momentum-graph
                 empty_fig,  # daily-graph
-                empty_json, # filtered-data
+                empty_json, # filtered-data (records)
                 empty_fig,  # cumulative-graph
                 empty_fig,  # daily-participant-graph
                 dash_kpi("Total Events", "🗓️"),
@@ -1106,7 +1107,8 @@ def update_all(
                 dash_kpi("Total Participants", "🌟"),
                 dash_kpi("Largest Single Event", "🥇"),
                 dash_kpi("Largest Day of Action", "📅"),
-                dash_kpi("Largest Day as of Action as % of Population", "🌎")
+                dash_kpi("Largest Day as of Action as % of Population", "🌎"),
+                None  # three-point-five-check (empty)
             )
 
         # Special case: If filter is set to "has no participant count", only show Total Events, others as "-"
@@ -1130,6 +1132,8 @@ def update_all(
             # Limit columns for dcc.Store
             table_columns = [col for col in dff_jittered.columns if not (col.startswith('source_') and col != 'source_1')]
             dff_for_store = dff_jittered[table_columns].copy()
+            # DataTable: always output a list of records, with NaN/None replaced by ""
+            table_records = dff_for_store.replace({np.nan: "", None: ""}).to_dict(orient='records')
 
             def best_location(row):
                 loc = str(row.get('location', 'Unknown')).strip()
@@ -1336,7 +1340,7 @@ def update_all(
                 fig_map,  # map-graph
                 dash_figure(),  # momentum-graph (shows dash)
                 fig_daily,  # daily-graph
-                dff_for_store.to_json(date_format='iso', orient='split'),  # filtered-data (LIMITED COLUMNS)
+                table_records,  # filtered-data (LIMITED COLUMNS, records)
                 fig_cumulative,  # cumulative-graph
                 dash_figure(),  # daily-participant-graph (shows dash)
                 total_events_kpi,  # total-events-kpi
@@ -1359,6 +1363,8 @@ def update_all(
         # Limit columns for dcc.Store
         table_columns = [col for col in dff_jittered.columns if not (col.startswith('source_') and col != 'source_1')]
         dff_for_store = dff_jittered[table_columns].copy()
+        # DataTable: always output a list of records, with NaN/None replaced by ""
+        table_records = dff_for_store.replace({np.nan: "", None: ""}).to_dict(orient='records')
 
         # Reuse the same location label logic from aggregate_events_for_map
         # SPEEDUP: Vectorized best_location
@@ -1680,13 +1686,44 @@ def update_all(
             'label': pop_label
         }
 
+        # Sanitize three_point_five_result for JSON serialization
+        def safe_int(val):
+            try:
+                if val is None or (isinstance(val, float) and np.isnan(val)):
+                    return 0
+                return int(val)
+            except Exception:
+                return 0
+        def safe_float(val):
+            try:
+                if val is None or (isinstance(val, float) and np.isnan(val)):
+                    return 0.0
+                return float(val)
+            except Exception:
+                return 0.0
+        def safe_str(val):
+            if val is None:
+                return ""
+            if isinstance(val, float) and np.isnan(val):
+                return ""
+            return str(val)
+        def safe_bool(val):
+            return bool(val)
+        three_point_five_result_safe = {
+            'threshold': safe_int(three_point_five_result.get('threshold', 0)),
+            'largest_day_total': safe_int(three_point_five_result.get('largest_day_total', 0)),
+            'met': safe_bool(three_point_five_result.get('met', False)),
+            'percent': safe_float(three_point_five_result.get('percent', 0.0)),
+            'population': safe_int(three_point_five_result.get('population', 0)),
+            'label': safe_str(three_point_five_result.get('label', "")),
+        }
         # Return the calculated outputs
         # Return only unique KPIs in the correct order
         return [
             fig_map,  # map-graph
             fig_momentum,  # momentum-graph
             fig_daily,  # daily-graph
-            dff_for_store.to_json(date_format='iso', orient='split'),  # filtered-data (LIMITED COLUMNS)
+            table_records,  # filtered-data (LIMITED COLUMNS, records)
             fig_cumulative,  # cumulative-graph
             fig_daily_participant,  # daily-participant-graph
             total_events_kpi,  # total-events-kpi
@@ -1698,7 +1735,7 @@ def update_all(
             largest_event_kpi,  # largest-event-kpi
             largest_day_kpi,  # largest-day-kpi
             percent_us_pop_kpi,  # percent-us-pop-kpi
-            three_point_five_result  # three-point-five-check
+            three_point_five_result_safe  # three-point-five-check (safe for JSON)
         ]
 
     except Exception as e:
@@ -1720,7 +1757,8 @@ def update_all(
             height=500,
             showlegend=False
         )
-        empty_json = pd.DataFrame().to_json(date_format='iso', orient='split')
+        # DataTable: always output a list of records, with NaN/None replaced by ""
+        empty_json = []
         dash_kpi = lambda label, icon="—": html.Div([
             html.Div("-", style={'fontSize': '1.35rem', 'fontWeight': '700'}),
             html.Div(icon, style={'fontSize': '1.2rem', 'margin': '0'}),
@@ -1731,7 +1769,7 @@ def update_all(
             empty_fig,  # map-graph
             empty_fig,  # momentum-graph
             empty_fig,  # daily-graph
-            empty_json, # filtered-data
+            empty_json, # filtered-data (records)
             empty_fig,  # cumulative-graph
             empty_fig,  # daily-participant-graph
             dash_kpi("Total Events", "🗓️"),
@@ -1866,7 +1904,13 @@ def update_event_details(click_data, filtered_data):
 def update_filtered_table(filtered_data):
     if not filtered_data:
         return [], []
-    dff = pd.read_json(StringIO(filtered_data), orient='split')
+    # PATCH: support both string and list formats
+    if isinstance(filtered_data, str):
+        dff = pd.read_json(StringIO(filtered_data), orient='split')
+    elif isinstance(filtered_data, list):
+        dff = pd.DataFrame(filtered_data)
+    else:
+        dff = pd.DataFrame()
     if dff.empty:
         return [], []
 
@@ -2006,7 +2050,13 @@ def update_missing_count_message(
         style = {'display': 'none'}
         return msg, style, msg, style, msg, style
 
-    dff = pd.read_json(io.StringIO(filtered_json), orient='split')
+    # Support both old (string) and new (list of dicts) formats for filtered_json
+    if isinstance(filtered_json, str):
+        dff = pd.read_json(io.StringIO(filtered_json), orient='split')
+    elif isinstance(filtered_json, list):
+        dff = pd.DataFrame(filtered_json)
+    else:
+        dff = pd.DataFrame()
     total_events = len(dff)
     if dff.empty or 'size_mean' not in dff.columns:
         return no_update, {'display': 'none'}, no_update, {'display': 'none'}, no_update, {'display': 'none'}
@@ -2109,7 +2159,13 @@ def handle_show_missing_and_tab(n_map, n_graphs, n_table, tab_value, store_val):
 def update_threshold_row(three_point_five_data, filtered_json):
     if not filtered_json or not three_point_five_data:
         return ""
-    dff = pd.read_json(io.StringIO(filtered_json), orient='split')
+    # PATCH: support both string and list formats
+    if isinstance(filtered_json, str):
+        dff = pd.read_json(io.StringIO(filtered_json), orient='split')
+    elif isinstance(filtered_json, list):
+        dff = pd.DataFrame(filtered_json)
+    else:
+        dff = pd.DataFrame()
     if dff.empty or 'date' not in dff.columns:
         return ""
     latest_date = dff['date'].max()
