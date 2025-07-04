@@ -454,19 +454,19 @@ app.layout = html.Div([
                     'backgroundColor': PRIMARY_BLUE, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 2px'
                 }),
                 html.Div(id='mean-size-kpi', style={
-                    'textAlign': 'center', 'padding': '4px', 'borderRadius': '8px',
+                    'flex': '1', 'textAlign': 'center', 'padding': '4px', 'borderRadius': '8px',
                     'backgroundColor': PRIMARY_RED, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 2px'
                 }),
                 html.Div(id='no-injuries-kpi', style={
-                    'textAlign': 'center', 'padding': '4px', 'borderRadius': '8px',
+                    'flex': '1', 'textAlign': 'center', 'padding': '4px', 'borderRadius': '8px',
                     'backgroundColor': PRIMARY_BLUE, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 2px'
                 }),
                 html.Div(id='no-arrests-kpi', style={
-                    'textAlign': 'center', 'padding': '4px', 'borderRadius': '8px',
+                    'flex': '1', 'textAlign': 'center', 'padding': '4px', 'borderRadius': '8px',
                     'backgroundColor': PRIMARY_RED, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 2px'
                 }),
                 html.Div(id='no-damage-kpi', style={
-                    'textAlign': 'center', 'padding': '4px', 'borderRadius': '8px',
+                    'flex': '1', 'textAlign': 'center', 'padding': '4px', 'borderRadius': '8px',
                     'backgroundColor': PRIMARY_BLUE, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 2px'
                 }),
             ], style={'display': 'flex', 'gap': '3px', 'marginBottom': '2px'}),
@@ -477,15 +477,15 @@ app.layout = html.Div([
                     'backgroundColor': PRIMARY_BLUE, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 2px'
                 }),
                 html.Div(id='largest-event-kpi', style={
-                    'textAlign': 'center', 'padding': '4px', 'borderRadius': '8px',
+                    'flex': '1', 'textAlign': 'center', 'padding': '4px', 'borderRadius': '8px',
                     'backgroundColor': PRIMARY_RED, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 2px'
                 }),
                 html.Div(id='largest-day-kpi', style={
-                    'textAlign': 'center', 'padding': '4px', 'borderRadius': '8px',
+                    'flex': '1', 'textAlign': 'center', 'padding': '4px', 'borderRadius': '8px',
                     'backgroundColor': PRIMARY_RED, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 2px'
                 }),
                 html.Div(id='percent-us-pop-kpi', style={
-                    'textAlign': 'center', 'padding': '4px', 'borderRadius': '8px',
+                    'flex': '1', 'textAlign': 'center', 'padding': '4px', 'borderRadius': '8px',
                     'backgroundColor': PRIMARY_BLUE, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 2px'
                 }),
             ], style={'display': 'flex', 'gap': '3px', 'marginBottom': '4px'}),
@@ -1898,9 +1898,9 @@ def update_event_details(click_data, filtered_data):
                         value = f"{int(round(float(value))):,}"
                     except Exception:
                         pass
-                # Title stays center, others left
+                # Title: left aligned, not bold
                 if label == 'Title':
-                    event_detail.append(html.P(f"{label}: {value}", style={'margin': '0 0 4px 0', 'textAlign': 'center', 'fontWeight': 'bold'}))
+                    event_detail.append(html.P(f"{label}: {value}", style={'margin': '0 0 4px 0', 'textAlign': 'left'}))
                 else:
                     event_detail.append(html.P(f"{label}: {value}", style={'margin': '0 0 4px 0', 'textAlign': 'left'}))
 
