@@ -433,280 +433,280 @@ app.layout = html.Div([
     dcc.Store(id='three-point-five-check'),
     html.Div(id='sidebar-dynamic', children=get_sidebar(is_open=True)),
     html.Div(id='main-content', children=[
-    html.Div(
-        "Anti-Trump Events - 2025",
-        style={
-            'fontFamily': FONT_FAMILY,
-            'fontWeight': 'bold',
-            'fontSize': '2rem',
-            'color': PRIMARY_BLUE,
-            'textAlign': 'center',
-            'marginBottom': '10px',
-            'marginTop': '0px'
-        }
-    ),
-    # 3.5% Threshold Row
-    html.Div(
-        id='threshold-row',
-        style={
-            'display': 'flex',
-            'justifyContent': 'center',
-            'alignItems': 'center',
-            'gap': '12px', 
-            'marginBottom': '8px',
-            'marginTop': '0px',
-            'fontFamily': FONT_FAMILY,
-            'fontSize': '1.05rem',
-            'border': f'2px solid {PRIMARY_BLUE}',
-            'borderRadius': '10px',
-            'boxShadow': '0 2px 8px rgba(36,76,196,0.07)',
-            'padding': '7px 16px',
-            'background': '#f8faff',
-        }
-    ),
-    # KPIs: Always visible, two rows, red/blue checkerboarded
-    html.Div([
-        # First row
+        html.Div(
+            "Anti-Trump Events - 2025",
+            style={
+                'fontFamily': FONT_FAMILY,
+                'fontWeight': 'bold',
+                'fontSize': '2rem',
+                'color': PRIMARY_BLUE,
+                'textAlign': 'center',
+                'marginBottom': '10px',
+                'marginTop': '0px'
+            }
+        ),
+        # KPIs: Always visible, two rows, red/blue checkerboarded
         html.Div([
-            html.Div(id='total-events-kpi', style={
-                'flex': '1', 'textAlign': 'center', 'padding': '4px', 'borderRadius': '8px',
-                'backgroundColor': PRIMARY_BLUE, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 2px'
-            }),
-            html.Div(id='mean-size-kpi', style={
-                'textAlign': 'center', 'padding': '4px', 'borderRadius': '8px',
-                'backgroundColor': PRIMARY_RED, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 2px'
-            }),
-            html.Div(id='no-injuries-kpi', style={
-                'textAlign': 'center', 'padding': '4px', 'borderRadius': '8px',
-                'backgroundColor': PRIMARY_BLUE, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 2px'
-            }),
-            html.Div(id='no-arrests-kpi', style={
-                'textAlign': 'center', 'padding': '4px', 'borderRadius': '8px',
-                'backgroundColor': PRIMARY_RED, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 2px'
-            }),
-            html.Div(id='no-damage-kpi', style={
-                'textAlign': 'center', 'padding': '4px', 'borderRadius': '8px',
-                'backgroundColor': PRIMARY_BLUE, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 2px'
-            }),
-        ], style={'display': 'flex', 'gap': '3px', 'marginBottom': '2px'}),
-        # Second row
-        html.Div([
-            html.Div(id='total-participants-kpi', style={
-                'flex': '1', 'textAlign': 'center', 'padding': '4px', 'borderRadius': '8px',
-                'backgroundColor': PRIMARY_BLUE, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 2px'
-            }),
-            html.Div(id='largest-event-kpi', style={
-                'textAlign': 'center', 'padding': '4px', 'borderRadius': '8px',
-                'backgroundColor': PRIMARY_RED, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 2px'
-            }),
-            html.Div(id='largest-day-kpi', style={
-                'textAlign': 'center', 'padding': '4px', 'borderRadius': '8px',
-                'backgroundColor': PRIMARY_RED, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 2px'
-            }),
-            html.Div(id='percent-us-pop-kpi', style={
-                'textAlign': 'center', 'padding': '4px', 'borderRadius': '8px',
-                'backgroundColor': PRIMARY_BLUE, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 2px'
-            }),
-        ], style={'display': 'flex', 'gap': '3px', 'marginBottom': '4px'}),
-    ], style={'marginBottom': '4px'}),
-    # Tabs and tabbed content
-    html.Div(
-        dcc.Tabs(
-            id='dashboard-tabs',
-            value='map',
-            children=[
-            dcc.Tab(label='Map', value='map', children=[
-                dcc.Graph(
-                    id='map-graph',
-                    config={
-                        'displayModeBar': True,
-                        'modeBarButtonsToRemove': ['select2d', 'lasso2d']
-                    }
-                ),
-                html.Div([
-                    html.Div(id='missing-count-message-text-map', style={
-                        'fontSize': '0.95em',
-                        'margin': '6px 0 8px 0',
-                        'textAlign': 'center',
-                        'color': '#111'
-                    }),
-                    html.Button(
-                        "Click here to see the events missing participant counts.",
-                        id="show-missing-link-map",
-                        style={
-                            'background': 'none',
-                            'border': 'none',
-                            'color': PRIMARY_BLUE,
-                            'textDecoration': 'underline',
-                            'cursor': 'pointer',
-                            'padding': 0,
-                            'font': 'inherit',
-                            'display': 'none',
+            # First row
+            html.Div([
+                html.Div(id='total-events-kpi', style={
+                    'flex': '1', 'textAlign': 'center', 'padding': '4px', 'borderRadius': '8px',
+                    'backgroundColor': PRIMARY_BLUE, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 2px'
+                }),
+                html.Div(id='mean-size-kpi', style={
+                    'textAlign': 'center', 'padding': '4px', 'borderRadius': '8px',
+                    'backgroundColor': PRIMARY_RED, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 2px'
+                }),
+                html.Div(id='no-injuries-kpi', style={
+                    'textAlign': 'center', 'padding': '4px', 'borderRadius': '8px',
+                    'backgroundColor': PRIMARY_BLUE, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 2px'
+                }),
+                html.Div(id='no-arrests-kpi', style={
+                    'textAlign': 'center', 'padding': '4px', 'borderRadius': '8px',
+                    'backgroundColor': PRIMARY_RED, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 2px'
+                }),
+                html.Div(id='no-damage-kpi', style={
+                    'textAlign': 'center', 'padding': '4px', 'borderRadius': '8px',
+                    'backgroundColor': PRIMARY_BLUE, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 2px'
+                }),
+            ], style={'display': 'flex', 'gap': '3px', 'marginBottom': '2px'}),
+            # Second row
+            html.Div([
+                html.Div(id='total-participants-kpi', style={
+                    'flex': '1', 'textAlign': 'center', 'padding': '4px', 'borderRadius': '8px',
+                    'backgroundColor': PRIMARY_BLUE, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 2px'
+                }),
+                html.Div(id='largest-event-kpi', style={
+                    'textAlign': 'center', 'padding': '4px', 'borderRadius': '8px',
+                    'backgroundColor': PRIMARY_RED, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 2px'
+                }),
+                html.Div(id='largest-day-kpi', style={
+                    'textAlign': 'center', 'padding': '4px', 'borderRadius': '8px',
+                    'backgroundColor': PRIMARY_RED, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 2px'
+                }),
+                html.Div(id='percent-us-pop-kpi', style={
+                    'textAlign': 'center', 'padding': '4px', 'borderRadius': '8px',
+                    'backgroundColor': PRIMARY_BLUE, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 2px'
+                }),
+            ], style={'display': 'flex', 'gap': '3px', 'marginBottom': '4px'}),
+        ], style={'marginBottom': '4px'}),
+        # 3.5% Threshold Row (move here, after KPIs)
+        html.Div(
+            id='threshold-row',
+            style={
+                'display': 'flex',
+                'justifyContent': 'center',
+                'alignItems': 'center',
+                'gap': '12px', 
+                'marginBottom': '8px',
+                'marginTop': '0px',
+                'fontFamily': FONT_FAMILY,
+                'fontSize': '1.05rem',
+                'border': f'2px solid {PRIMARY_BLUE}',
+                'borderRadius': '10px',
+                'boxShadow': '0 2px 8px rgba(36,76,196,0.07)',
+                'padding': '7px 16px',
+                'background': '#f8faff',
+            }
+        ),
+        # Tabs and tabbed content (table last)
+        html.Div(
+            dcc.Tabs(
+                id='dashboard-tabs',
+                value='map',
+                children=[
+                dcc.Tab(label='Map', value='map', children=[
+                    dcc.Graph(
+                        id='map-graph',
+                        config={
+                            'displayModeBar': True,
+                            'modeBarButtonsToRemove': ['select2d', 'lasso2d']
                         }
                     ),
-                    html.Div(id='event-details-panel', style={'marginTop': '12px'})
-                ], id='missing-count-message-map', style={'textAlign': 'center'}),
+                    html.Div([
+                        html.Div(id='missing-count-message-text-map', style={
+                            'fontSize': '0.95em',
+                            'margin': '6px 0 8px 0',
+                            'textAlign': 'center',
+                            'color': '#111'
+                        }),
+                        html.Button(
+                            "Click here to see the events missing participant counts.",
+                            id="show-missing-link-map",
+                            style={
+                                'background': 'none',
+                                'border': 'none',
+                                'color': PRIMARY_BLUE,
+                                'textDecoration': 'underline',
+                                'cursor': 'pointer',
+                                'padding': 0,
+                                'font': 'inherit',
+                                'display': 'none',
+                            }
+                        ),
+                        html.Div(id='event-details-panel', style={'marginTop': '12px'})
+                    ], id='missing-count-message-map', style={'textAlign': 'center'}),
 
-            ]),
-            dcc.Tab(label='Graphs', value='graphs', children=[
-                html.Div([
-                    html.Div("Momentum of Dissent", style={
-                        'fontWeight': 'bold',
-                        'fontSize': '1em',
-                        'marginBottom': '14px',
-                        'textAlign': 'center',
-                        'lineHeight': '1.1',
-                        'paddingBottom': '0px',
-                    }),
-                    dcc.Graph(
-                        id='momentum-graph',
-                        config={
-                            'displayModeBar': True,
-                            'modeBarButtonsToRemove': ['select2d', 'lasso2d']
+                ]),
+                dcc.Tab(label='Graphs', value='graphs', children=[
+                    html.Div([
+                        html.Div("Momentum of Dissent", style={
+                            'fontWeight': 'bold',
+                            'fontSize': '1em',
+                            'marginBottom': '14px',
+                            'textAlign': 'center',
+                            'lineHeight': '1.1',
+                            'paddingBottom': '0px',
+                        }),
+                        dcc.Graph(
+                            id='momentum-graph',
+                            config={
+                                'displayModeBar': True,
+                                'modeBarButtonsToRemove': ['select2d', 'lasso2d']
+                            },
+                            style={'marginTop': '0px', 'paddingTop': '0px'}
+                        )
+                    ], style={'marginBottom': '36px', 'paddingBottom': '0px'}),
+                    html.Div([
+                        html.Div("Daily Event Count", style={
+                            'fontWeight': 'bold',
+                            'fontSize': '1em',
+                            'marginBottom': '14px',
+                            'textAlign': 'center',
+                            'lineHeight': '1.1',
+                            'paddingBottom': '0px',
+                        }),
+                        dcc.Graph(
+                            id='daily-graph',
+                            config={
+                                'displayModeBar': True,
+                                'modeBarButtonsToRemove': ['select2d', 'lasso2d']
+                            },
+                            style={'marginTop': '0px', 'paddingTop': '0px'}
+                        )
+                    ], style={'marginBottom': '36px', 'paddingBottom': '0px'}),
+                    html.Div([
+                        html.Div("Cumulative Total Events", style={
+                            'fontWeight': 'bold',
+                            'fontSize': '1em',
+                            'marginBottom': '14px',
+                            'textAlign': 'center',
+                            'lineHeight': '1.1',
+                            'paddingBottom': '0px',
+                        }),
+                        dcc.Graph(
+                            id='cumulative-graph',
+                            config={
+                                'displayModeBar': True,
+                                'modeBarButtonsToRemove': ['select2d', 'lasso2d']
+                            },
+                            style={'marginTop': '0px', 'paddingTop': '0px'}
+                        )
+                    ], style={'marginBottom': '36px', 'paddingBottom': '0px'}),
+                    html.Div([
+                        html.Div("Daily Participant Count", style={
+                            'fontWeight': 'bold',
+                            'fontSize': '1em',
+                            'marginBottom': '14px',
+                            'textAlign': 'center',
+                            'lineHeight': '1.1',
+                            'paddingBottom': '0px',
+                        }),
+                        dcc.Graph(
+                            id='daily-participant-graph',
+                            config={
+                                'displayModeBar': True,
+                                'modeBarButtonsToRemove': ['select2d', 'lasso2d']
+                            },
+                            style={'marginTop': '0px', 'paddingTop': '0px'}
+                        )
+                    ], style={'marginBottom': '36px', 'paddingBottom': '0px'}),
+                    html.Div([
+                        html.Div(id='missing-count-message-text-graphs', style={
+                            'fontSize': '0.95em',
+                            'margin': '6px 0 8px 0',
+                            'textAlign': 'center',
+                            'color': '#111'
+                        }),
+                        html.Button(
+                            "Click here to see the events missing participant counts.",
+                            id="show-missing-link-graphs",
+                            style={
+                                'background': 'none',
+                                'border': 'none',
+                                'color': PRIMARY_BLUE,
+                                'textDecoration': 'underline',
+                                'cursor': 'pointer',
+                                'padding': 0,
+                                'font': 'inherit',
+                                'display': 'none',
+                            }
+                        )
+                    ], id='missing-count-message-graphs', style={'textAlign': 'center'}),
+                ]),
+                dcc.Tab(label='Table', value='table', children=[
+                    dash_table.DataTable(
+                        id='filtered-table',
+                        columns=[],
+                        style_table={
+                            'overflowY': 'auto',
+                            'maxHeight': '400px',
+                            'overflowX': 'auto',
+                            'width': '100%',
+                            'minWidth': '100%'
                         },
-                        style={'marginTop': '0px', 'paddingTop': '0px'}
-                    )
-                ], style={'marginBottom': '36px', 'paddingBottom': '0px'}),
-                html.Div([
-                    html.Div("Daily Event Count", style={
-                        'fontWeight': 'bold',
-                        'fontSize': '1em',
-                        'marginBottom': '14px',
-                        'textAlign': 'center',
-                        'lineHeight': '1.1',
-                        'paddingBottom': '0px',
-                    }),
-                    dcc.Graph(
-                        id='daily-graph',
-                        config={
-                            'displayModeBar': True,
-                            'modeBarButtonsToRemove': ['select2d', 'lasso2d']
+                        style_cell={
+                            'textAlign': 'left',
+                            'padding': '7px',
+                            'fontFamily': FONT_FAMILY,
+                            'fontSize': '13px'
                         },
-                        style={'marginTop': '0px', 'paddingTop': '0px'}
-                    )
-                ], style={'marginBottom': '36px', 'paddingBottom': '0px'}),
-                html.Div([
-                    html.Div("Cumulative Total Events", style={
-                        'fontWeight': 'bold',
-                        'fontSize': '1em',
-                        'marginBottom': '14px',
-                        'textAlign': 'center',
-                        'lineHeight': '1.1',
-                        'paddingBottom': '0px',
-                    }),
-                    dcc.Graph(
-                        id='cumulative-graph',
-                        config={
-                            'displayModeBar': True,
-                            'modeBarButtonsToRemove': ['select2d', 'lasso2d']
+                        style_header={
+                            'fontWeight': 'bold',
+                            'backgroundColor': PRIMARY_BLUE,
+                            'color': PRIMARY_WHITE
                         },
-                        style={'marginTop': '0px', 'paddingTop': '0px'}
-                    )
-                ], style={'marginBottom': '36px', 'paddingBottom': '0px'}),
-                html.Div([
-                    html.Div("Daily Participant Count", style={
-                        'fontWeight': 'bold',
-                        'fontSize': '1em',
-                        'marginBottom': '14px',
-                        'textAlign': 'center',
-                        'lineHeight': '1.1',
-                        'paddingBottom': '0px',
-                    }),
-                    dcc.Graph(
-                        id='daily-participant-graph',
-                        config={
-                            'displayModeBar': True,
-                            'modeBarButtonsToRemove': ['select2d', 'lasso2d']
-                        },
-                        style={'marginTop': '0px', 'paddingTop': '0px'}
-                    )
-                ], style={'marginBottom': '36px', 'paddingBottom': '0px'}),
-                html.Div([
-                    html.Div(id='missing-count-message-text-graphs', style={
-                        'fontSize': '0.95em',
-                        'margin': '6px 0 8px 0',
-                        'textAlign': 'center',
-                        'color': '#111'
-                    }),
-                    html.Button(
-                        "Click here to see the events missing participant counts.",
-                        id="show-missing-link-graphs",
-                        style={
-                            'background': 'none',
-                            'border': 'none',
-                            'color': PRIMARY_BLUE,
-                            'textDecoration': 'underline',
-                            'cursor': 'pointer',
-                            'padding': 0,
-                            'font': 'inherit',
-                            'display': 'none',
-                        }
-                    )
-                ], id='missing-count-message-graphs', style={'textAlign': 'center'}),
-            ]),
-            dcc.Tab(label='Table', value='table', children=[
-                dash_table.DataTable(
-                    id='filtered-table',
-                    columns=[],
-                    style_table={
-                        'overflowY': 'auto',
-                        'maxHeight': '400px',
-                        'overflowX': 'auto',
-                        'width': '100%',
-                        'minWidth': '100%'
-                    },
-                    style_cell={
-                        'textAlign': 'left',
-                        'padding': '7px',
-                        'fontFamily': FONT_FAMILY,
-                        'fontSize': '13px'
-                    },
-                    style_header={
-                        'fontWeight': 'bold',
-                        'backgroundColor': PRIMARY_BLUE,
-                        'color': PRIMARY_WHITE
-                    },
-                    virtualization=True,
-                    fixed_rows={'headers': True}
-                ),
-                html.Div([
-                    html.Div(id='missing-count-message-text-table', style={
-                        'fontSize': '0.95em',
-                        'margin': '6px 0 8px 0',
-                        'textAlign': 'center',
-                        'color': '#111'
-                    }),
-                    html.Button(
-                        "Click here to see the events missing participant counts.",
-                        id="show-missing-link-table",
-                        style={
-                            'background': 'none',
-                            'border': 'none',
-                            'color': PRIMARY_BLUE,
-                            'textDecoration': 'underline',
-                            'cursor': 'pointer',
-                            'padding': 0,
-                            'font': 'inherit',
-                            'display': 'none',
-                        }
-                    )
-                ], id='missing-count-message-table', style={'textAlign': 'center'}),
-            ])
-        ],
-        style={
-            'marginBottom': '12px',
-            'height': '40px',
-            'minHeight': '38px',
-            'fontSize': '1em',
-            'paddingBottom': '10px',
-            'marginTop': '0px',
-            'display': 'flex',
-            'alignItems': 'flex-start',
-        },
-        className='dashboard-tabs-custom'
-    ),
-    style={'marginBottom': '50px'}
-    )
+                        virtualization=True,
+                        fixed_rows={'headers': True}
+                    ),
+                    html.Div([
+                        html.Div(id='missing-count-message-text-table', style={
+                            'fontSize': '0.95em',
+                            'margin': '6px 0 8px 0',
+                            'textAlign': 'center',
+                            'color': '#111'
+                        }),
+                        html.Button(
+                            "Click here to see the events missing participant counts.",
+                            id="show-missing-link-table",
+                            style={
+                                'background': 'none',
+                                'border': 'none',
+                                'color': PRIMARY_BLUE,
+                                'textDecoration': 'underline',
+                                'cursor': 'pointer',
+                                'padding': 0,
+                                'font': 'inherit',
+                                'display': 'none',
+                            }
+                        )
+                    ], id='missing-count-message-table', style={'textAlign': 'center'}),
+                ])
+            ],
+            style={
+                'marginBottom': '12px',
+                'height': '40px',
+                'minHeight': '38px',
+                'fontSize': '1em',
+                'paddingBottom': '10px',
+                'marginTop': '0px',
+                'display': 'flex',
+                'alignItems': 'flex-start',
+            },
+            className='dashboard-tabs-custom'
+        ),
+        style={'marginBottom': '50px'}
+        )
     ], style={
         'width': 'calc(100% - 320px)',
         'padding': '32px',
@@ -1759,12 +1759,8 @@ def update_all(
         )
         # DataTable: always output a list of records, with NaN/None replaced by ""
         empty_json = []
-        dash_kpi = lambda label, icon="—": html.Div([
-            html.Div("-", style={'fontSize': '1.35rem', 'fontWeight': '700'}),
-            html.Div(icon, style={'fontSize': '1.2rem', 'margin': '0'}),
-            html.Div(label, style={'fontSize': '0.85rem', 'margin': '0'})
-        ], style={'marginBottom': '0'})
-        # Use the same unique KPIs and labels as in the main output
+        # Return blank/empty for each KPI output, not a list of Divs (prevents duplicate KPIs)
+        blank_kpi = html.Div("-", style={'fontSize': '1.35rem', 'fontWeight': '700', 'textAlign': 'center'})
         return [
             empty_fig,  # map-graph
             empty_fig,  # momentum-graph
@@ -1772,15 +1768,15 @@ def update_all(
             empty_json, # filtered-data (records)
             empty_fig,  # cumulative-graph
             empty_fig,  # daily-participant-graph
-            dash_kpi("Total Events", "🗓️"),
-            dash_kpi("Average Participants per Event", "📊"),
-            dash_kpi("Events with No Injuries", "🚑"),
-            dash_kpi("Events with No Arrests", "🚔"),
-            dash_kpi("Events with No Property Damage", "🏚️"),
-            dash_kpi("Total Participants", "🌟"),
-            dash_kpi("Largest Single Event", "🥇"),
-            dash_kpi("Largest Day of Action", "📅"),
-            dash_kpi("Largest Day of Action as % of Population", "🌎"),
+            blank_kpi,  # total-events-kpi
+            blank_kpi,  # mean-size-kpi
+            blank_kpi,  # no-injuries-kpi
+            blank_kpi,  # no-arrests-kpi
+            blank_kpi,  # no-damage-kpi
+            blank_kpi,  # total-participants-kpi
+            blank_kpi,  # largest-event-kpi
+            blank_kpi,  # largest-day-kpi
+            blank_kpi,  # percent-us-pop-kpi
             None  # three-point-five-check (empty)
         ]
 
@@ -1790,6 +1786,7 @@ def update_all(
     State('filtered-data', 'data')
 )
 def update_event_details(click_data, filtered_data):
+
     if not click_data or not filtered_data:
         return html.Div(
             "Click a map marker to see event details.",
@@ -1797,25 +1794,65 @@ def update_event_details(click_data, filtered_data):
         )
 
     try:
-        dff = pd.read_json(io.StringIO(filtered_data), orient='split')
+        import json
+        # Support both string (JSON) and list (records) for filtered_data
+        if isinstance(filtered_data, str):
+            try:
+                dff = pd.read_json(io.StringIO(filtered_data), orient='split')
+            except Exception:
+                try:
+                    dff = pd.read_json(io.StringIO(filtered_data), orient='records')
+                except Exception:
+                    dff = pd.DataFrame(json.loads(filtered_data))
+        elif isinstance(filtered_data, list):
+            dff = pd.DataFrame(filtered_data)
+        else:
+            return html.Div("No event data available.", style={'color': 'red'})
+
+        if dff.empty:
+            return html.Div("No event data available.", style={'color': 'red'})
+
         point = click_data['points'][0]
         location_label = point.get('text')
-        if not location_label:
+        lat = point.get('lat')
+        lon = point.get('lon')
+        if not location_label and (lat is None or lon is None):
             return html.Div("No details available for this location.", style={'color': '#555', 'margin': '12px 0'})
 
         # Normalize for robust matching
         def norm(x):
-            return str(x).strip().lower() if pd.notnull(x) else ''
+            if x is None:
+                return ''
+            return str(x).strip().lower().replace('\u200b', '').replace('\xa0', ' ').replace('  ', ' ')
 
+        # Try matching by normalized location_label
         norm_label = norm(location_label)
-        dff['__norm_label'] = dff['location_label'].apply(norm)
+        if 'location_label' in dff.columns:
+            dff['__norm_label'] = dff['location_label'].apply(norm)
+        else:
+            dff['__norm_label'] = ''
         location_events = dff[dff['__norm_label'] == norm_label]
 
         # Fallback: substring match if exact match fails
+        if location_events.empty and norm_label:
+            location_events = dff[dff['__norm_label'].str.contains(norm_label, na=False)]
+
+        # Fallback: match by rounded lat/lon if still empty
+        if location_events.empty and lat is not None and lon is not None:
+            def round_coord(val):
+                try:
+                    return round(float(val), 4)
+                except Exception:
+                    return None
+            lat_r = round_coord(lat)
+            lon_r = round_coord(lon)
+            if 'lat' in dff.columns and 'lon' in dff.columns:
+                dff['__lat_r'] = dff['lat'].apply(round_coord)
+                dff['__lon_r'] = dff['lon'].apply(round_coord)
+                location_events = dff[(dff['__lat_r'] == lat_r) & (dff['__lon_r'] == lon_r)]
+
         if location_events.empty:
-            location_events = dff[dff['__norm_label'].str.contains(re.escape(norm_label))]
-            if location_events.empty:
-                return html.Div("No event details found for this marker.", style={'color': '#555', 'margin': '12px 0'})
+            return html.Div("No event details found for this marker.", style={'color': '#555', 'margin': '12px 0'})
 
         # Always show these fields (with "Unknown" if missing)
         always_fields = [
@@ -1851,11 +1888,16 @@ def update_event_details(click_data, filtered_data):
                 value = event.get(col, 'Unknown')
                 if pd.isnull(value) or (isinstance(value, str) and (not value.strip() or value.strip().lower() == 'nan')):
                     value = 'Unknown'
-                if col == 'date' and pd.notnull(value) and value != 'Unknown':
+                if col == 'date' and value != 'Unknown' and pd.notnull(value):
                     try:
                         value = pd.to_datetime(value).strftime('%Y-%m-%d')
                     except Exception:
                         value = 'Unknown'
+                if col == 'size_mean' and value != 'Unknown' and pd.notnull(value):
+                    try:
+                        value = f"{int(round(float(value))):,}"
+                    except Exception:
+                        pass
                 # Title stays center, others left
                 if label == 'Title':
                     event_detail.append(html.P(f"{label}: {value}", style={'margin': '0 0 4px 0', 'textAlign': 'center', 'fontWeight': 'bold'}))
@@ -1865,7 +1907,7 @@ def update_event_details(click_data, filtered_data):
             # Only show optional fields if not Unknown
             for label, col in optional_fields:
                 value = event.get(col, 'Unknown')
-                if pd.isnull(value) or (isinstance(value, str) and (not value.strip() or value.strip().lower() == 'nan')):
+                if pd.isnull(value) or (isinstance(value, str) and (not value.strip() or value.strip().lower() == 'nan') or str(value).lower() == 'unknown'):
                     continue  # Skip if Unknown
                 event_detail.append(html.P(f"{label}: {value}", style={'margin': '0 0 4px 0', 'textAlign': 'left'}))
 
@@ -1889,8 +1931,11 @@ def update_event_details(click_data, filtered_data):
 
     except Exception as e:
         return html.Div(
-            f"An error occurred while loading event details: {str(e)}",
-            style={'color': PRIMARY_RED, 'fontSize': '.9em', 'fontStyle': 'italic', 'textAlign': 'center', 'padding': '16px 0'}
+            [
+                html.Div("An error occurred while loading event details:", style={'color': PRIMARY_RED, 'fontWeight': 'bold'}),
+                html.Pre(str(e), style={'color': PRIMARY_RED, 'fontSize': '.9em'})
+            ],
+            style={'fontStyle': 'italic', 'textAlign': 'center', 'padding': '16px 0'}
         )
 
     
