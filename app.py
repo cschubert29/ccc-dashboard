@@ -430,7 +430,7 @@ app.layout = html.Div([
                 'marginBottom': '24px'
             }
         ),
-        # KPIs: Always visible, two rows, red/blue checkerboarded
+        # KPIs: Always visible, two rows, red/blue
         html.Div([
             # First row
             html.Div([
@@ -468,11 +468,11 @@ app.layout = html.Div([
                 }),
                 html.Div(id='largest-day-kpi', style={
                     'flex': '1', 'textAlign': 'center', 'padding': '7px', 'borderRadius': '10px',
-                    'backgroundColor': PRIMARY_RED, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 3px'
+                    'backgroundColor': PRIMARY_BLUE, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 3px'
                 }),
                 html.Div(id='percent-us-pop-kpi', style={
                     'flex': '1', 'textAlign': 'center', 'padding': '7px', 'borderRadius': '10px',
-                    'backgroundColor': PRIMARY_BLUE, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 3px'
+                    'backgroundColor': PRIMARY_RED, 'color': PRIMARY_WHITE, 'fontWeight': 'bold', 'margin': '0 3px'
                 }),
             ], style={'display': 'flex', 'gap': '6px', 'marginBottom': '12px'}),
         
@@ -786,7 +786,7 @@ def filter_data(
             dff[col] = pd.to_numeric(dff[col], errors='coerce')
 
     # DO NOT convert 'property_damage' to numeric here!
-    # The boolean column 'property_damage_any' is already created at load time.
+    # The boolean column 'property_damage_any' is already created
 
     # Date filter
     if start_date and end_date:
@@ -1032,21 +1032,21 @@ def update_all(start_date=None, end_date=None, day_of_action=None, size_filter=N
         html.Div([
             html.Div(f"{percent_no_injuries:.1f}%", style={'fontSize': '1.35rem', 'fontWeight': '700'}),
             html.Div("🚑", style={'fontSize': '1.2rem', 'margin': '0'}),
-            html.Div("% with No Injuries", style={'fontSize': '0.85rem', 'margin': '0'})
+            html.Div("Events with No Injuries", style={'fontSize': '0.85rem', 'margin': '0'})
         ], style={'marginBottom': '0'})
     ]
     no_arrests_kpi = [
         html.Div([
             html.Div(f"{percent_no_arrests:.1f}%", style={'fontSize': '1.35rem', 'fontWeight': '700'}),
             html.Div("🚔", style={'fontSize': '1.2rem', 'margin': '0'}),
-            html.Div("% with No Arrests", style={'fontSize': '0.85rem', 'margin': '0'})
+            html.Div("Events with No Arrests", style={'fontSize': '0.85rem', 'margin': '0'})
         ], style={'marginBottom': '0'})
     ]
     no_damage_kpi = [
         html.Div([
             html.Div(f"{percent_no_damage:.1f}%", style={'fontSize': '1.35rem', 'fontWeight': '700'}),
             html.Div("🏚️", style={'fontSize': '1.2rem', 'margin': '0'}),
-            html.Div("% with No Property Damage", style={'fontSize': '0.85rem', 'margin': '0'})
+            html.Div("Events with No Property Damage", style={'fontSize': '0.85rem', 'margin': '0'})
         ], style={'marginBottom': '0'})
     ]
     percent_us_pop_kpi = [
@@ -1096,10 +1096,10 @@ def update_all(start_date=None, end_date=None, day_of_action=None, size_filter=N
             dash_kpi("Largest Day", "🥇"),
             dash_kpi("Total Participants", "🌟"),
             dash_kpi("Events Missing Participant Count", "🔍"),
-            dash_kpi("% with No Injuries", "🚑"),
-            dash_kpi("% with No Arrests", "🚔"),
-            dash_kpi("% with No Property Damage", "🏚️"),
-            dash_kpi("Most Daily Participants as % of USA", "🌎")
+            dash_kpi("Events with No Injuries", "🚑"),
+            dash_kpi("Events with No Arrests", "🚔"),
+            dash_kpi("Events with No Property Damage", "🏚️"),
+            dash_kpi("Most Daily Participants as % of USA", "👥")
         )
 
     # Jitter coordinates for map visualization
@@ -1279,7 +1279,68 @@ def update_all(start_date=None, end_date=None, day_of_action=None, size_filter=N
     if 'location_label' not in dff.columns:
         dff['location_label'] = dff.apply(best_location, axis=1)
 
-    # --- Responsive Sentence + Link Button Section ---
+    from state_pop import STATE_POP  # ensure this is imported at the top
+
+    # Percent of Population KPI
+    # Handle both string and list inputs
+    selected_states = state_filter if isinstance(state_filter, list) else [state_filter]
+
+    # Determine which population base to use
+    if size_filter == "no":
+        percent_us_pop_kpi = "-"
+    else:
+        if len(selected_states) == 1 and selected_states[0] in STATE_POP:
+            state_code = selected_states[0]
+            population_base = STATE_POP[state_code]
+            pop_label = f"% of {state_code} Population"
+        else:
+            population_base = US_POPULATION
+            pop_label = "% of US Population"
+
+        if total_participants > 0 and population_base > 0:
+            percent_val = 100 * total_participants / population_base
+            percent_us_pop_kpi = html.Div([
+                html.Div(f"{percent_val:.2f}%", style={
+                    'fontWeight': 'bold',
+                    'fontSize': '1.4rem'
+                }),
+                html.Div("👥", style={
+                    'textAlign': 'center',
+                    'lineHeight': '1.2',
+                    'fontSize': '1rem',
+                    'marginTop': '2px'
+                }),
+                html.Div(pop_label, style={
+                    'fontSize': '0.85rem',
+                    'textAlign': 'center',
+                    'marginTop': '2px'
+                })
+            ])
+        else:
+            percent_us_pop_kpi = html.Div([
+                html.Div("-", style={
+                    'fontWeight': 'bold',
+                    'fontSize': '1.4rem'
+                }),
+                html.Div("👥", style={
+                    'textAlign': 'center',
+                    'lineHeight': '1.2',
+                    'fontSize': '1rem',
+                    'marginTop': '2px'
+                }),
+                html.Div(pop_label, style={
+                    'fontSize': '0.85rem',
+                    'textAlign': 'center',
+                    'marginTop': '2px'
+                })
+            ])
+
+
+
+
+
+
+    # Responsive Sentence + Link Button Section
     LINK_BUTTON_STYLE = {
         'color': PRIMARY_BLUE,
         'fontWeight': '600',
