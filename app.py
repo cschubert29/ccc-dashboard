@@ -168,8 +168,8 @@ filter_panel = html.Div([
             {'label': 'Any Participant Injuries', 'value': 'participant_injuries_any'},
             {'label': 'Any Police Injuries', 'value': 'police_injuries_any'},
             {'label': 'Any Property Damage', 'value': 'property_damage_any'},
-            {'label': 'Any Participant Deaths', 'value': 'participant_deaths_any'},
-            {'label': 'Any Police Deaths', 'value': 'police_deaths_any'},
+            # {'label': 'Any Participant Deaths', 'value': 'participant_deaths_any'},
+            # {'label': 'Any Police Deaths', 'value': 'police_deaths_any'},
         ],
         value=[],
         style={'marginBottom': '20px', 'fontFamily': FONT_FAMILY}
@@ -779,8 +779,8 @@ def filter_data(
 
     # Only convert columns that should be numeric for filtering
     for col in [
-        'arrests', 'participant_injuries', 'police_injuries',
-        'participant_deaths', 'police_deaths'
+        'arrests', 'participant_injuries', 'police_injuries'
+        # ,'participant_deaths', 'police_deaths'
     ]:
         if col in dff.columns:
             dff[col] = pd.to_numeric(dff[col], errors='coerce')
@@ -824,10 +824,10 @@ def filter_data(
             mask &= dff['police_injuries'].notna() & (dff['police_injuries'] > 0)
         elif outcome == 'property_damage_any':
             mask &= dff['property_damage_any'] == 1
-        elif outcome == 'participant_deaths_any':
-            mask &= dff['participant_deaths'].notna() & (dff['participant_deaths'] > 0)
-        elif outcome == 'police_deaths_any':
-            mask &= dff['police_deaths'].notna() & (dff['police_deaths'] > 0)
+        # elif outcome == 'participant_deaths_any':
+        #     mask &= dff['participant_deaths'].notna() & (dff['participant_deaths'] > 0)
+        # elif outcome == 'police_deaths_any':
+        #     mask &= dff['police_deaths'].notna() & (dff['police_deaths'] > 0)
 
     return dff.loc[mask].copy()
 
