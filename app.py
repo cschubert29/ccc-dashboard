@@ -14,6 +14,11 @@ import time
 file_path = "ccc_anti_trump.csv"  
 US_POPULATION = 340_100_000
 
+# Check if a preprocessed file exists and delete if it does so updates are easier in the future
+processed_file = "processed_data.parquet"
+if os.path.exists(processed_file):
+    os.remove(processed_file)
+
 # Check if a preprocessed file exists
 processed_file = "processed_data.parquet"
 if os.path.exists(processed_file):
@@ -85,7 +90,13 @@ filter_panel = html.Div([
         start_date=df['date'].min(),
         end_date=df['date'].max(),
         display_format='YYYY-MM-DD',
-        style={'marginBottom': '4px', 'width': '100%'}
+        # calendar_orientation='vertical',
+        day_size=29,     
+        style={
+        'backgroundColor': PRIMARY_WHITE,
+        'color': PRIMARY_BLUE,
+        'border': f'1.5px solid {PRIMARY_WHITE}',
+        }
     ),
     html.Div(
         "Click the date values to select dates to filter on. Note data is on a monthly release schedule, so recent events may not appear until the next update.",
@@ -107,7 +118,9 @@ filter_panel = html.Div([
             {'label': 'April 5', 'value': '2025-04-05'},
             {'label': 'April 19', 'value': '2025-04-19'},
             {'label': 'May 1', 'value': '2025-05-01'},
-            {'label': 'June 4', 'value': '2025-06-04'},
+            {'label': 'June 14', 'value': '2025-06-14'},
+            {'label': 'July 4', 'value': '2025-07-04'},
+            {'label': 'July 17', 'value': '2025-06-17'},
         ],
         placeholder="Select a date...",
         style={
@@ -321,7 +334,7 @@ definitions_panel = html.Div([
 # Define the get_sidebar function
 def get_sidebar(is_open):
     sidebar_style = {
-        'width': '320px' if is_open else '0px',
+        'width': '380px' if is_open else '0px',
         'minWidth': '0px',
         'padding': '18px 16px 48px 16px' if is_open else '0px',
         'boxSizing': 'border-box',
@@ -417,7 +430,7 @@ app.layout = html.Div([
     dcc.Location(id='url', refresh=False),
     dcc.Store(id='filtered-data'),
     dcc.Store(id='sidebar-open', data=True),
-    html.Div(id='sidebar-dynamic', children=get_sidebar(is_open=True)),
+    html.Div(id='sidebar-dynamic'),
     html.Div(id='main-content', children=[
         html.Div(
             "Anti-Trump Events - 2025",
@@ -427,7 +440,17 @@ app.layout = html.Div([
                 'fontSize': '2.5rem',
                 'color': PRIMARY_BLUE,
                 'textAlign': 'center',
-                'marginBottom': '24px'
+                'marginBottom': '14px'
+            }
+        ),
+        html.Div(
+            f"Data current to {df['date'].max().strftime('%Y-%m-%d') if not df['date'].isna().all() else 'Unknown'}",
+            style={
+                'fontFamily': FONT_FAMILY,
+                'fontSize': '1.1rem',
+                'color': '#444',
+                'textAlign': 'center',
+                'marginBottom': '20px'
             }
         ),
         # KPIs: Always visible, two rows, red/blue
@@ -723,7 +746,7 @@ def toggle_sidebar(n, is_open):
 def render_sidebar(is_open):
     # Adjust main content width based on sidebar state
     main_style = {
-        'width': 'calc(100% - 320px)' if is_open else '100%',
+        'width': 'calc(100% - 380px)' if is_open else '100%',
         'padding': '32px',
         'boxSizing': 'border-box',
         'flexGrow': '1',
@@ -1460,10 +1483,20 @@ def update_all(start_date=None, end_date=None, day_of_action=None, size_filter=N
     State('filtered-data', 'data')
 )
 def update_event_details(click_data, filtered_data):
+    box_style = {
+        'padding': '18px 12px',
+        'background': '#f7f9fc',
+        'borderRadius': '16px',
+        'boxShadow': '0 2px 8px rgba(0,0,0,0.07)',
+        'margin': '0 0 18px 0',
+        'border': f'1.5px solid {PRIMARY_BLUE}',
+        'width': '100%',
+        'color': '#222'
+    }
     if not click_data or not filtered_data:
         return html.Div(
             "Click a map marker to see event details.",
-            style={'color': '#555', 'fontSize': '.9em', 'fontStyle': 'italic', 'textAlign': 'center', 'padding': '16px 0'}
+            style={**box_style, 'color': '#555', 'fontSize': '.9em', 'fontStyle': 'italic', 'textAlign': 'center'}
         )
 
     try:
@@ -1471,7 +1504,7 @@ def update_event_details(click_data, filtered_data):
         point = click_data['points'][0]
         location_label = point.get('text')
         if not location_label:
-            return html.Div("No details available for this location.", style={'color': '#555', 'margin': '12px 0'})
+            return html.Div("No details available for this location.", style=box_style)
 
         # Normalize for robust matching
         def norm(x):
@@ -1485,7 +1518,7 @@ def update_event_details(click_data, filtered_data):
         if location_events.empty:
             location_events = dff[dff['__norm_label'].str.contains(re.escape(norm_label))]
             if location_events.empty:
-                return html.Div("No event details found for this marker.", style={'color': '#555', 'margin': '12px 0'})
+                return html.Div("No event details found for this marker.", style=box_style)
 
         # Always show these fields (with "Unknown" if missing)
         always_fields = [
@@ -1552,14 +1585,14 @@ def update_event_details(click_data, filtered_data):
                 ], open=True, style={'marginBottom': '16px'})
             )
 
-        return html.Div(details, style={'padding': '12px'})
+        return html.Div(details, style=box_style)
 
     except Exception as e:
         return html.Div(
             f"An error occurred while loading event details: {str(e)}",
-            style={'color': PRIMARY_RED, 'fontSize': '.9em', 'fontStyle': 'italic', 'textAlign': 'center', 'padding': '16px 0'}
+            style={**box_style, 'color': PRIMARY_RED, 'fontSize': '.9em', 'fontStyle': 'italic', 'textAlign': 'center'}
         )
-
+    
 
 @app.callback(
     [Output('filtered-table', 'data'),
@@ -1626,6 +1659,7 @@ def update_city_options(selected_states, selected_cities):
         return [], []
     # Filter df for selected states and get unique cities
     filtered = df[df['state'].isin(selected_states)]
+   
     cities = sorted(filtered['resolved_locality'].dropna().unique())
     options = [{'label': c, 'value': c} for c in cities]
     # Remove any selected cities that are not in the new options
@@ -1652,3 +1686,5 @@ def click_missing(n_clicks, current_filter):
 # Uncomment the following 2 lines to run the app directly and test locally. Comment back out when deploying to production.
 if __name__ == '__main__':
     app.run(debug=True)
+
+    
