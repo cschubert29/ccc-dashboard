@@ -986,11 +986,6 @@ def update_all(start_date=None, end_date=None, day_of_action=None, size_filter=N
         'fontWeight': '700',
         'marginRight': '10px',
         'fontSize': '1.1rem'
-    }),
-    html.Span(f"as of {last_event_date}", style={
-        'color': '#555',
-        'fontStyle': 'italic',
-        'fontSize': '0.95rem'
     })
 ], style={
     'border': f'2px solid {PRIMARY_BLUE}',
