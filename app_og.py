@@ -13,7 +13,13 @@ import time
 # Data file path
 file_path = "ccc_anti_trump.csv"  
 US_POPULATION = 340_100_000
-
+# -------------------------
+# Design Color Constants
+# -------------------------
+BLUE   = "#2563eb"
+WHITE      = "#ffffff"
+RED    = "#dc2626"
+GREEN = 
 # Check if a preprocessed file exists and delete if it does so updates are easier in the future
 processed_file = "processed_data.parquet"
 if os.path.exists(processed_file):
@@ -982,7 +988,7 @@ def update_all(start_date=None, end_date=None, day_of_action=None, size_filter=N
         'fontSize': '1rem',
     }),
     html.Span("✅ Yes" if threshold_met else "❌ No", style={
-        'color': '#228B22' if threshold_met else '#C0392B',
+        'color': BLUE if threshold_met else RED_600,
         'fontWeight': '700',
         'marginRight': '10px',
         'fontSize': '1.1rem'
