@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import plotly.express as px
+import plotly.io as pio
 import plotly.graph_objects as go
 from dash import Dash, dcc, html, Input, Output, State, no_update, dash_table, ctx
 from flask_caching import Cache
@@ -63,6 +64,47 @@ MAX_DATE = df['date'].max()
 app = Dash(__name__, suppress_callback_exceptions=True)
 server = app.server
 app.title = "Protest Dashboard"
+
+# Inject font links into <head>
+app.index_string = """
+<!DOCTYPE html>
+<html>
+  <head>
+    {%metas%}
+    <title>{%title%}</title>
+    {%favicon%}
+    {%css%}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Lexend+Deca:wght@400;600;700&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.cdnfonts.com/css/lemon-milk" rel="stylesheet">
+  </head>
+  <body>
+    {%app_entry%}
+    <footer>
+      {%config%}
+      {%scripts%}
+      {%renderer%}
+    </footer>
+  </body>
+</html>
+"""
+
+pio.templates.default = "plotly_white"
+px.defaults.color_discrete_sequence = ["#274CC0", "#AF3F43", "#6B4682", "#F19E38", "#94B97D"]  # blue, red, purple, yellow, green
+pio.templates["plotly_white"].layout.font.family = (
+    "Work Sans, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "
+    "Arial, Noto Color Emoji, Apple Color Emoji, sans-serif"
+)
+
+
+
+
+# Plotly defaults to match brand tokens
+pio.templates.default = "plotly_white"
+px.defaults.color_discrete_sequence = [BLUE, RED, "#111827"]  # extend if needed
+pio.templates["plotly_white"].layout.font.family = "Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Noto Color Emoji, Apple Color Emoji, Arial, sans-serif"
+
 
 cache = Cache(app.server, config={'CACHE_TYPE': 'filesystem', 'CACHE_DIR': 'cache-directory'})
 os.makedirs('cache-directory', exist_ok=True)
@@ -262,79 +304,249 @@ def get_sidebar(is_open: bool):
         html.Div([content, bottom_btn], id='sidebar', className=f"sidebar {'open' if is_open else 'closed'}"),
         toggle_tab
     ], className="sidebar-wrapper")
+# --- Star divider helper (brand: red/white/blue stars) ---
+def star_divider():
+    # use text star (★) so we can color it via CSS
+    return html.Div([
+        html.Span("★", className="star red"),
+        html.Span("★", className="star white"),
+        html.Span("★", className="star blue"),
+    ], className="star-divider")
+# ----------------------------------------------------------
 
 # -------------------------
 # Layout
 # -------------------------
-app.layout = html.Div([
-    dcc.Location(id='url', refresh=False),
-    dcc.Store(id='filtered-data'),
-    dcc.Store(id='sidebar-open', data=True),
-    html.Div(id='sidebar-dynamic', children=get_sidebar(True)),
-    html.Div(id='main-content', children=[
-        html.Div("Anti-Trump Events - 2025", className="title"),
-        html.Div(
-            f"Data current to {df['date'].max().strftime('%Y-%m-%d') if not df['date'].isna().all() else 'Unknown'}",
-            className="subtitle"
-        ),
-        html.Div([
-            html.Div([
-                html.Div(id='total-events-kpi', className="kpi-box kpi-blue"),
-                html.Div(id='mean-size-kpi', className="kpi-box kpi-red"),
-                html.Div(id='no-injuries-kpi', className="kpi-box kpi-blue"),
-                html.Div(id='no-arrests-kpi', className="kpi-box kpi-red"),
-                html.Div(id='no-damage-kpi', className="kpi-box kpi-blue"),
-            ], className="kpi-row"),
-            html.Div([
-                html.Div(id='total-participants-kpi', className="kpi-box kpi-red"),
-                html.Div(id='largest-event-kpi', className="kpi-box kpi-blue"),
-                html.Div(id='largest-day-kpi', className="kpi-box kpi-blue"),
-                html.Div(id='percent-us-pop-kpi', className="kpi-box kpi-red"),
-            ], className="kpi-row second"),
-            html.Div(id='threshold-text', className="threshold-box")
-        ], className="kpi-section"),
-        dcc.Tabs(
-            id='dashboard-tabs',
-            value='map',
-            children=[
-                dcc.Tab(label='Map', value='map', children=[
-                    dcc.Graph(id='map-graph', config={'displayModeBar': True, 'modeBarButtonsToRemove': ['select2d','lasso2d']}),
-                    html.Div(id='event-details-panel')
-                ]),
-                dcc.Tab(label='Graphs', value='graphs', children=[
+# -------------------------
+# Layout
+# -------------------------
+app.layout = dcc.Loading(
+    id="loading-wrapper",
+    type="circle",       # "circle", "dot", or "default"
+    color=BLUE,
+    className="brand-loading",
+    fullscreen=True,     # covers the entire page until content is ready
+    children=html.Div([
+        dcc.Location(id='url', refresh=False),
+        dcc.Store(id='filtered-data'),
+        dcc.Store(id='sidebar-open', data=True),
+
+        html.Div(id='sidebar-dynamic', children=get_sidebar(True)),
+
+        html.Div(id='main-content', children=[
+            html.Div("Anti-Trump Events - 2025", className="title"),
+            html.Div(
+                f"Data current to {df['date'].max().strftime('%Y-%m-%d') if not df['date'].isna().all() else 'Unknown'}",
+                className="subtitle"
+            ),
+
+            # KPI SECTION
+            dcc.Loading(
+                type="dot",
+                color=BLUE,
+                className="brand-loading",
+                children=html.Div([
                     html.Div([
-                        html.Div("Momentum of Dissent", className="graph-title"),
-                        dcc.Graph(id='momentum-graph', config={'displayModeBar': True, 'modeBarButtonsToRemove': ['select2d','lasso2d']})
+                        html.Div(id='total-events-kpi', className="kpi-box kpi-blue"),
+                        html.Div(id='mean-size-kpi', className="kpi-box kpi-red"),
+                        html.Div(id='no-injuries-kpi', className="kpi-box kpi-blue"),
+                        html.Div(id='no-arrests-kpi', className="kpi-box kpi-red"),
+                        html.Div(id='no-damage-kpi', className="kpi-box kpi-blue"),
+                    ], className="kpi-row"),
+                    html.Div([
+                        html.Div(id='total-participants-kpi', className="kpi-box kpi-red"),
+                        html.Div(id='largest-event-kpi', className="kpi-box kpi-blue"),
+                        html.Div(id='largest-day-kpi', className="kpi-box kpi-blue"),
+                        html.Div(id='percent-us-pop-kpi', className="kpi-box kpi-red"),
+                    ], className="kpi-row second"),
+                    html.Div(id='threshold-text', className="threshold-box")
+                ], className="kpi-section")
+            ),
+
+            # TABS
+            dcc.Tabs(
+                id='dashboard-tabs',
+                value='map',
+                className="tabs-wrapper",
+                children=[
+                    dcc.Tab(label='Map', value='map', children=[
+                        dcc.Loading(
+                            type="dot",
+                            color=BLUE,
+                            className="brand-loading",
+                            children=dcc.Graph(
+                                id='map-graph',
+                                config={'displayModeBar': True,
+                                        'modeBarButtonsToRemove': ['select2d','lasso2d']}
+                            )
+                        ),
+                        html.Div(id='event-details-panel'),
+                        star_divider(),   # <-- swapped emoji_divider for star divider
                     ]),
-                    html.Div([
-                        html.Div("Daily Event Count", className="graph-title"),
-                        dcc.Graph(id='daily-graph', config={'displayModeBar': True, 'modeBarButtonsToRemove': ['select2d','lasso2d']})
+                    dcc.Tab(label='Graphs', value='graphs', children=[
+                        html.Div([
+                            html.Div("Momentum of Dissent", className="graph-title"),
+                            dcc.Loading(
+                                type="dot",
+                                color=BLUE,
+                                className="brand-loading",
+                                children=dcc.Graph(
+                                    id='momentum-graph',
+                                    config={'displayModeBar': True,
+                                            'modeBarButtonsToRemove': ['select2d','lasso2d']}
+                                )
+                            )
+                        ]),
+                        html.Div([
+                            html.Div("Daily Event Count", className="graph-title"),
+                            dcc.Loading(
+                                type="dot",
+                                color=BLUE,
+                                className="brand-loading",
+                                children=dcc.Graph(
+                                    id='daily-graph',
+                                    config={'displayModeBar': True,
+                                            'modeBarButtonsToRemove': ['select2d','lasso2d']}
+                                )
+                            )
+                        ]),
+                        html.Div([
+                            html.Div("Cumulative Total Events", className="graph-title"),
+                            dcc.Loading(
+                                type="dot",
+                                color=BLUE,
+                                className="brand-loading",
+                                children=dcc.Graph(
+                                    id='cumulative-graph',
+                                    config={'displayModeBar': True,
+                                            'modeBarButtonsToRemove': ['select2d','lasso2d']}
+                                )
+                            )
+                        ]),
+                        html.Div([
+                            html.Div("Daily Participant Count", className="graph-title"),
+                            dcc.Loading(
+                                type="dot",
+                                color=BLUE,
+                                className="brand-loading",
+                                children=dcc.Graph(
+                                    id='daily-participant-graph',
+                                    config={'displayModeBar': True,
+                                            'modeBarButtonsToRemove': ['select2d','lasso2d']}
+                                )
+                            )
+                        ]),
+                        star_divider(),
                     ]),
-                    html.Div([
-                        html.Div("Cumulative Total Events", className="graph-title"),
-                        dcc.Graph(id='cumulative-graph', config={'displayModeBar': True, 'modeBarButtonsToRemove': ['select2d','lasso2d']})
+                    dcc.Tab(label='Table', value='table', children=[
+                        dcc.Loading(
+                            type="dot",
+                            color=BLUE,
+                            className="brand-loading",
+                            children=dash_table.DataTable(
+                                id='filtered-table',
+                                columns=[],
+                                data=[],
+                                virtualization=True,
+                                fixed_rows={'headers': True},
+                                fill_width=False,                 # <-- key: don't force-fit columns
+                                page_action='none',
+                                tooltip_delay=0,
+                                tooltip_duration=None,
+
+                                style_table={
+                                    'overflowY': 'auto',
+                                    'overflowX': 'auto',          # horizontal scroll instead of squishing
+                                    'width': '100%',
+                                    'minWidth': '100%',
+                                    'height': '70vh',
+                                    'maxHeight': '70vh',
+                                    'border': '1px solid var(--gray-300)',
+                                    'borderRadius': '8px',
+                                    'boxShadow': 'var(--shadow-sm)',
+                                },
+
+                                style_header={
+                                    'backgroundColor': 'var(--white)',
+                                    'fontWeight': 700,
+                                    'borderBottom': '1px solid var(--gray-300)',
+                                    'position': 'sticky',
+                                    'top': 0,
+                                    'zIndex': 1
+                                },
+
+                                # compact baseline
+                                style_cell={
+                                    'textAlign': 'left',
+                                    'padding': '6px 10px',
+                                    'fontSize': '13px',
+                                    'fontFamily': 'inherit',
+                                    'borderBottom': '1px solid var(--gray-300)',
+                                    'whiteSpace': 'nowrap',
+                                    'overflow': 'hidden',
+                                    'textOverflow': 'ellipsis',
+                                    'minWidth': '9ch',            # <-- prevents 0px columns
+                                    'width': 'auto',
+                                    'maxWidth': '80ch',
+                                },
+
+                                style_cell_conditional=[
+                                    {'if': {'column_id': 'date'},              'width': '18ch', 'maxWidth': '18ch'},
+                                    {'if': {'column_id': 'locality'},          'width': '18ch'},
+                                    {'if': {'column_id': 'resolved_locality'}, 'width': '20ch'},
+                                    {'if': {'column_id': 'resolved_county'},   'width': '24ch'},
+
+                                    # long text columns: allow wrapping (we clamp to 4 lines via CSS below)
+                                    {'if': {'column_id': 'title'},             'maxWidth': '42ch', 'whiteSpace': 'normal'},
+                                    {'if': {'column_id': 'organizations'},     'maxWidth': '44ch', 'whiteSpace': 'normal'},
+                                    {'if': {'column_id': 'claims_summary'},    'maxWidth': '56ch', 'whiteSpace': 'normal'},
+                                    {'if': {'column_id': 'notes'},             'maxWidth': '56ch', 'whiteSpace': 'normal'},
+                                    {'if': {'column_id': 'targets'},           'maxWidth': '40ch', 'whiteSpace': 'normal'},
+                                    {'if': {'column_id': 'verbatim'},          'maxWidth': '64ch', 'whiteSpace': 'normal'},
+                                ],
+
+                                style_data={'backgroundColor': 'var(--white)'},
+                                style_data_conditional=[
+                                    {'if': {'row_index': 'odd'}, 'backgroundColor': 'rgba(0,0,0,0.015)'},
+                                    {'if': {'state': 'active'},  'backgroundColor': 'rgba(39,76,192,0.08)'}
+                                ],
+
+                                css=[
+                                    {'selector': '.dash-fixed-content', 'rule': 'background-color: var(--white) !important;'},
+                                    {'selector': '.dash-spreadsheet-container .dash-spreadsheet-inner table',
+                                    'rule': 'border-collapse: separate; border-spacing: 0;'},  # <-- removed table-layout: fixed
+                                    {'selector': '.dash-spreadsheet .dash-header',
+                                    'rule': 'border-bottom: 1px solid var(--gray-300);'},
+
+                                    # 4-line clamp on inner value element for long fields
+                                    {'selector': 'td[data-dash-column="title"] .dash-cell-value,'
+                                                'td[data-dash-column="organizations"] .dash-cell-value,'
+                                                'td[data-dash-column="claims_summary"] .dash-cell-value,'
+                                                'td[data-dash-column="notes"] .dash-cell-value,'
+                                                'td[data-dash-column="targets"] .dash-cell-value,'
+                                                'td[data-dash-column="verbatim"] .dash-cell-value',
+                                    'rule': 'display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical;'
+                                            'overflow: hidden; white-space: normal; line-height: 1.35;'
+                                            'max-height: calc(1.35em * 4);'}
+                                ],
+                            )
+
+
+
+
+
+
+
+                        ),
+                        star_divider(),
                     ]),
-                    html.Div([
-                        html.Div("Daily Participant Count", className="graph-title"),
-                        dcc.Graph(id='daily-participant-graph', config={'displayModeBar': True, 'modeBarButtonsToRemove': ['select2d','lasso2d']})
-                    ])
-                ]),
-                dcc.Tab(label='Table', value='table', children=[
-                    dash_table.DataTable(
-                        id='filtered-table',
-                        columns=[],
-                        style_table={'overflowY': 'auto', 'maxHeight': '500px', 'overflowX': 'auto', 'width': '100%', 'minWidth': '100%'},
-                        style_cell={'textAlign': 'left', 'padding': '10px'},
-                        virtualization=True,
-                        fixed_rows={'headers': True}
-                    )
-                ])
-            ],
-            className="tabs-wrapper"
-        ),
-        html.Div(id='footer-message', className="footer-message")
-    ], className="main-content")
-], className="app-root")
+                ]
+            ),
+
+            html.Div(id='footer-message', className="footer-message")
+        ], className="main-content")
+    ], className="app-root")
+)
 
 # -------------------------
 # Sidebar callbacks
@@ -921,18 +1133,33 @@ def update_event_details(click_data, filtered_data):
 # -------------------------
 @app.callback(
     [Output('filtered-table', 'data'),
-     Output('filtered-table', 'columns')],
+     Output('filtered-table', 'columns'),
+     Output('filtered-table', 'tooltip_data')],
     Input('filtered-data', 'data')
 )
 def update_table(data_json):
     if not data_json:
-        return [], []
+        return [], [], []
     try:
         dff = pd.read_json(io.StringIO(data_json), orient='split')
         columns = [{'name': col, 'id': col} for col in dff.columns]
-        return dff.to_dict('records'), columns
+
+        long_cols = ['title','organizations','claims_summary','notes','targets','verbatim']
+        present = [c for c in long_cols if c in dff.columns]
+
+        # one tooltip dict per row; include only present long columns
+        tooltip_data = []
+        for _, row in dff.iterrows():
+            tip = {}
+            for c in present:
+                val = "" if pd.isna(row.get(c)) else str(row.get(c))
+                tip[c] = {'value': val, 'type': 'text'}
+            tooltip_data.append(tip)
+
+        return dff.to_dict('records'), columns, tooltip_data
     except Exception:
-        return [], []
+        return [], [], []
+
 
 @app.callback(
     Output("download-data", "data"),
