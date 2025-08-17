@@ -18,10 +18,9 @@ PROCESSED = "processed_data.parquet"
 # -------------------------
 # Design Color Constants
 # -------------------------
-BLUE   = "#2563eb"
+BLUE   = "#244CC4"
 WHITE      = "#ffffff"
-RED    = "#dc2626"
-GREEN = "#16a34a"
+RED    = "#AC3C3D"
 # Ensure clean preprocess (mirrors original behavior)
 if os.path.exists(PROCESSED):
     os.remove(PROCESSED)
@@ -1018,4 +1017,4 @@ def click_missing(n_clicks, current_filter):
 # Entrypoint
 # -------------------------
 if __name__ == '__main__':
-    app.run(debug=Fale)
+    app.run(debug=False)
