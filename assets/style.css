@@ -190,6 +190,11 @@ input[type="text"], .VirtualizedSelectFocusedOption, .Select-control{
   padding:16px; background:var(--white); border:1px solid var(--gray-300);
   border-radius:var(--radius-lg); box-shadow:var(--shadow-sm); margin:0 0 16px; width:100%;
   color:var(--gray-700);
+  font-size: 14px;
+  padding: 16px;
+  margin: 16px 0;
+  max-width: 80rem;
+  box-sizing: border-box;
 }
 .details-box.hint{ font-style:italic; }
 .details-box.error{ color: var(--red); }
@@ -318,3 +323,31 @@ input[type="text"], .VirtualizedSelectFocusedOption, .Select-control{
   max-width: 640px;
   white-space: normal;   /* allow multi-line */
 }
+
+.text-input {
+  width: 100%; /* Ensure it spans the full width of the sidebar */
+  box-sizing: border-box; /* Include padding and border in the width */
+}
+/* Pretty toggle button at the bottom of the sidebar */
+.toggle-definitions{
+  appearance: none;
+  display: inline-block;
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: var(--blue);
+  color: var(--white);
+  font-weight: 700;
+  border: 1px solid transparent;
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition: transform .03s ease, filter .15s ease, box-shadow .15s ease;
+  font-family: 'Lexend Deca', sans-serif;
+}
+
+.toggle-definitions:hover{ filter: brightness(0.96); }
+.toggle-definitions:active{ transform: translateY(1px); }
+.toggle-definitions:focus{ outline: none; box-shadow: var(--focus-ring); }
+
+/* keep using your visibility helper */
+.toggle-definitions.hidden{ display: none; }
